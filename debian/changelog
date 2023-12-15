@@ -1,8 +1,45 @@
-libheif (1.12.0-deepin1) unstable; urgency=medium
+libheif (1.15.1-1deepin1) unstable; urgency=medium
 
-  * Rebuild
+  * Remove Werror
 
- -- Deepin Packages Builder <packages@deepin.org>  Fri, 11 Nov 2022 17:59:27 +0800
+ -- Han Gao <gaohan@iscas.ac.cn>  Thu, 23 Mar 2023 18:27:06 +0800
+
+libheif (1.15.1-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 1.15.1
+    - Fix CVE-2023-0996 (Closes: #1032101)
+    - Do not fail if no plugin directory is available (Closes: #1029668)
+  * debian/libheif1.symbols: Add new symbols
+  * debian/*.install: Update for new upstream release
+
+ -- Sebastian Ramacher <sramacher@debian.org>  Thu, 02 Mar 2023 00:09:34 +0100
+
+libheif (1.14.2-1) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Apply multi-arch hints. + heif-gdk-pixbuf: Add Multi-Arch: same.
+
+  [ Joachim Bauch ]
+  * New upstream version 1.14.2
+  * Update symbols for new upstream version.
+  * Switch to cmake and use arch-dependent include directory.
+  * Update "Standards-Version" to 4.6.2
+
+ -- Joachim Bauch <bauch@struktur.de>  Tue, 17 Jan 2023 10:17:32 +0100
+
+libheif (1.13.0-1) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
+    Repository-Browse.
+
+  [ Joachim Bauch ]
+  * New upstream version 1.13.0
+  * Update symbols for new upstream version.
+  * Update "Standards-Version" to 4.6.1
+
+ -- Joachim Bauch <bauch@struktur.de>  Fri, 02 Sep 2022 13:20:39 +0200
 
 libheif (1.12.0-2) unstable; urgency=medium
 

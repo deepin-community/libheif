@@ -21,6 +21,7 @@
 #include "heif_image.h"
 #include "heif_avif.h"
 #include "bitstream.h"
+#include "common_utils.h"
 #include <limits>
 
 using namespace heif;
@@ -28,25 +29,12 @@ using namespace heif;
 // https://aomediacodec.github.io/av1-spec/av1-spec.pdf
 
 
-Error heif::fill_av1C_configuration(Box_av1C::configuration* inout_config, std::shared_ptr<HeifPixelImage> image)
+Error heif::fill_av1C_configuration(Box_av1C::configuration* inout_config, const std::shared_ptr<HeifPixelImage>& image)
 {
   int bpp = image->get_bits_per_pixel(heif_channel_Y);
   heif_chroma chroma = image->get_chroma_format();
 
-  uint8_t profile;
-
-  if (bpp <= 10 &&
-      (chroma == heif_chroma_420 ||
-       chroma == heif_chroma_monochrome)) {
-    profile = 0;
-  }
-  else if (bpp <= 10 &&
-           chroma == heif_chroma_444) {
-    profile = 1;
-  }
-  else {
-    profile = 2;
-  }
+  uint8_t profile = compute_avif_profile(bpp, chroma);
 
   int width = image->get_width(heif_channel_Y);
   int height = image->get_height(heif_channel_Y);
@@ -76,7 +64,7 @@ Error heif::fill_av1C_configuration(Box_av1C::configuration* inout_config, std::
   // 2 - CSP_COLOCATED
   // 3 - CSP_RESERVED
 
-  inout_config->chroma_sample_position = 0;
+  inout_config->chroma_sample_position = (chroma == heif_chroma_420 ? 0 : 2);
 
 
   return Error::Ok;
@@ -87,7 +75,7 @@ static uint64_t leb128(BitReader& reader)
 {
   uint64_t val = 0;
   for (int i = 0; i < 8; i++) {
-    int v = reader.get_bits(8);
+    int64_t v = reader.get_bits(8);
     val |= (v & 0x7F) << (i * 7);
     if (!(v & 0x80)) {
       break;
@@ -275,8 +263,8 @@ bool heif::fill_av1C_configuration_from_stream(Box_av1C::configuration* out_conf
     }
 
     // screen content
-    int force_screen_content_tools = 0;
-    if (reader.get_bits(1)) {
+    int force_screen_content_tools = 2;
+    if (reader.get_bits(1) == 0) {
       force_screen_content_tools = reader.get_bits(1);
     }
 

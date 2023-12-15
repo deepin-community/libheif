@@ -18,9 +18,11 @@
  * along with libheif.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "heif.h"
-#include "heif_plugin.h"
-#include "heif_api_structs.h"
+#include "libheif/heif.h"
+#include "libheif/heif_plugin.h"
+#include "heif_encoder_x265.h"
+#include <memory>
+#include <sstream>
 
 #if defined(HAVE_CONFIG_H)
 #include "config.h"
@@ -39,7 +41,6 @@ extern "C" {
 
 static const char* kError_unsupported_bit_depth = "Bit depth not supported by x265";
 static const char* kError_unsupported_image_size = "Images smaller than 16 pixels are not supported";
-static const char* kError_out_of_memory = "Out of memory";
 
 
 enum parameter_type
@@ -77,13 +78,13 @@ struct encoder_struct_x265
 
   void add_param(const parameter&);
 
-  void add_param(std::string name, int value);
+  void add_param(const std::string& name, int value);
 
-  void add_param(std::string name, bool value);
+  void add_param(const std::string& name, bool value);
 
-  void add_param(std::string name, std::string value);
+  void add_param(const std::string& name, const std::string& value);
 
-  parameter get_param(std::string name) const;
+  parameter get_param(const std::string& name) const;
 
   std::string preset;
   std::string tune;
@@ -112,7 +113,7 @@ void encoder_struct_x265::add_param(const parameter& p)
 }
 
 
-void encoder_struct_x265::add_param(std::string name, int value)
+void encoder_struct_x265::add_param(const std::string& name, int value)
 {
   parameter p;
   p.type = Int;
@@ -121,7 +122,7 @@ void encoder_struct_x265::add_param(std::string name, int value)
   add_param(p);
 }
 
-void encoder_struct_x265::add_param(std::string name, bool value)
+void encoder_struct_x265::add_param(const std::string& name, bool value)
 {
   parameter p;
   p.type = Bool;
@@ -130,7 +131,7 @@ void encoder_struct_x265::add_param(std::string name, bool value)
   add_param(p);
 }
 
-void encoder_struct_x265::add_param(std::string name, std::string value)
+void encoder_struct_x265::add_param(const std::string& name, const std::string& value)
 {
   parameter p;
   p.type = String;
@@ -140,7 +141,7 @@ void encoder_struct_x265::add_param(std::string name, std::string value)
 }
 
 
-parameter encoder_struct_x265::get_param(std::string name) const
+parameter encoder_struct_x265::get_param(const std::string& name) const
 {
   for (size_t i = 0; i < parameters.size(); i++) {
     if (parameters[i].name == name) {
@@ -187,8 +188,9 @@ static const char* x265_plugin_name()
 {
   strcpy(plugin_name, "x265 HEVC encoder");
 
-  const char* x265_version = (x265_version_str != nullptr ? x265_version_str : "null");
-  
+  const x265_api* api = x265_api_get(0);
+  const char* x265_version = ((api != nullptr && api->version_str != nullptr) ? api->version_str : "null");
+
   if (strlen(x265_version) + strlen(plugin_name) + 4 < MAX_PLUGIN_NAME_LENGTH) {
     strcat(plugin_name, " (");
     strcat(plugin_name, x265_version);
@@ -772,6 +774,8 @@ static struct heif_error x265_encode_image(void* encoder_raw, const struct heif_
     assert(heif_image_get_width(image, heif_channel_Cr)==w);
     assert(heif_image_get_height(image, heif_channel_Cb)==h);
     assert(heif_image_get_height(image, heif_channel_Cr)==h);
+    (void) w;
+    (void) h;
   }
 
   api->param_parse(param, "info", "0");
@@ -786,9 +790,17 @@ static struct heif_error x265_encode_image(void* encoder_raw, const struct heif_
   api->param_parse(param, "psy-rd", "1.0");
   api->param_parse(param, "psy-rdoq", "1.0");
 
-  auto nclx = image->image->get_color_profile_nclx();
+  struct heif_color_profile_nclx* nclx = nullptr;
+  heif_error err = heif_image_get_nclx_color_profile(image, &nclx);
+  if (err.code != heif_error_Ok) {
+    nclx = nullptr;
+  }
+
+  // make sure NCLX profile is deleted at end of function
+  auto nclx_deleter = std::unique_ptr<heif_color_profile_nclx, void (*)(heif_color_profile_nclx*)>(nclx, heif_nclx_color_profile_free);
+
   if (nclx) {
-    api->param_parse(param, "range", nclx->get_full_range_flag() ? "full" : "limited");
+    api->param_parse(param, "range", nclx->full_range_flag ? "full" : "limited");
   }
   else {
     api->param_parse(param, "range", "full");
@@ -800,19 +812,19 @@ static struct heif_error x265_encode_image(void* encoder_raw, const struct heif_
 
     {
       std::stringstream sstr;
-      sstr << nclx->get_colour_primaries();
+      sstr << nclx->color_primaries;
       api->param_parse(param, "colorprim", sstr.str().c_str());
     }
 
     {
       std::stringstream sstr;
-      sstr << nclx->get_transfer_characteristics();
+      sstr << nclx->transfer_characteristics;
       api->param_parse(param, "transfer", sstr.str().c_str());
     }
 
     {
       std::stringstream sstr;
-      sstr << nclx->get_matrix_coefficients();
+      sstr << nclx->matrix_coefficients;
       api->param_parse(param, "colormatrix", sstr.str().c_str());
     }
   }
@@ -865,13 +877,12 @@ static struct heif_error x265_encode_image(void* encoder_raw, const struct heif_
   param->sourceWidth = rounded_size(param->sourceWidth);
   param->sourceHeight = rounded_size(param->sourceHeight);
 
-  bool success = image->image->extend_padding_to_size(param->sourceWidth, param->sourceHeight);
-  if (!success) {
-    struct heif_error err = {
-        heif_error_Memory_allocation_error,
-        heif_suberror_Unspecified,
-        kError_out_of_memory
-    };
+  // Note: it is ok to cast away the const, as the image content is not changed.
+  // However, we have to guarantee that there are no plane pointers or stride values kept over calling the svt_encode_image() function.
+  err = heif_image_extend_padding_to_size(const_cast<struct heif_image*>(image),
+                                          param->sourceWidth,
+                                          param->sourceHeight);
+  if (err.code) {
     return err;
   }
 
@@ -1011,3 +1022,12 @@ const struct heif_encoder_plugin* get_encoder_plugin_x265()
 {
   return &encoder_plugin_x265;
 }
+
+
+#if PLUGIN_X265
+heif_plugin_info plugin_info {
+  1,
+  heif_plugin_type_encoder,
+  &encoder_plugin_x265
+};
+#endif

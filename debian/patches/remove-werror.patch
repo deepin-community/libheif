@@ -1,0 +1,37 @@
+Description: Remove Werror
+Author: Han Gao <gaohan@iscas.ac.cn>
+
+Last-Update: 2023-03-23
+
+--- libheif-1.15.1.orig/CMakeLists.txt
++++ libheif-1.15.1/CMakeLists.txt
+@@ -22,7 +22,6 @@ endif()
+ 
+ if(NOT MSVC)
+   add_definitions(-Wall)
+-  add_definitions(-Werror)
+   add_definitions(-Wsign-compare)
+   add_definitions(-Wconversion)
+   add_definitions(-Wno-sign-conversion)
+--- libheif-1.15.1.orig/configure
++++ libheif-1.15.1/configure
+@@ -19933,7 +19933,7 @@ fi
+ 
+ 
+ 
+-WARNING_FLAGS="-Wall -Werror -Wsign-compare -Wconversion -Wno-sign-conversion -Wno-error=conversion -Wno-error=unused-parameter -Wno-error=deprecated-declarations"
++WARNING_FLAGS="-Wall -Wsign-compare -Wconversion -Wno-sign-conversion -Wno-error=conversion -Wno-error=unused-parameter -Wno-error=deprecated-declarations"
+ 
+ CXXFLAGS="$CXXFLAGS $WARNING_FLAGS"
+ CFLAGS="$CFLAGS $WARNING_FLAGS"
+--- libheif-1.15.1.orig/configure.ac
++++ libheif-1.15.1/configure.ac
+@@ -325,7 +325,7 @@ fi
+ AC_SUBST(ENABLE_MULTITHREADING_SUPPORT)
+ AC_SUBST(ENABLE_PARALLEL_TILE_DECODING)
+ 
+-WARNING_FLAGS="-Wall -Werror -Wsign-compare -Wconversion -Wno-sign-conversion -Wno-error=conversion -Wno-error=unused-parameter -Wno-error=deprecated-declarations"
++WARNING_FLAGS="-Wall -Wsign-compare -Wconversion -Wno-sign-conversion -Wno-error=conversion -Wno-error=unused-parameter -Wno-error=deprecated-declarations"
+ 
+ CXXFLAGS="$CXXFLAGS $WARNING_FLAGS"
+ CFLAGS="$CFLAGS $WARNING_FLAGS"

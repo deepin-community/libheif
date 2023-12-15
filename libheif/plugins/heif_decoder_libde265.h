@@ -21,6 +21,14 @@
 #ifndef LIBHEIF_HEIF_DECODER_DE265_H
 #define LIBHEIF_HEIF_DECODER_DE265_H
 
+#include "libheif/common_utils.h"
+
 const struct heif_decoder_plugin* get_decoder_plugin_libde265();
+
+#if PLUGIN_LIBDE265
+extern "C" {
+MAYBE_UNUSED LIBHEIF_API extern heif_plugin_info plugin_info;
+}
+#endif
 
 #endif

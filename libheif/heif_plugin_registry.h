@@ -46,14 +46,28 @@ struct heif_encoder_descriptor
 
 
 namespace heif {
+  struct encoder_descriptor_priority_order
+  {
+    bool operator()(const std::unique_ptr<struct heif_encoder_descriptor>& a,
+                    const std::unique_ptr<struct heif_encoder_descriptor>& b) const
+    {
+      return a->plugin->priority > b->plugin->priority;  // highest priority first
+    }
+  };
+
 
   extern std::set<const struct heif_decoder_plugin*> s_decoder_plugins;
+
+  extern std::multiset<std::unique_ptr<struct heif_encoder_descriptor>,
+    encoder_descriptor_priority_order> s_encoder_descriptors;
+
+  void register_default_plugins();
 
   void register_decoder(const heif_decoder_plugin* decoder_plugin);
 
   void register_encoder(const heif_encoder_plugin* encoder_plugin);
 
-  const struct heif_decoder_plugin* get_decoder(enum heif_compression_format type);
+  const struct heif_decoder_plugin* get_decoder(enum heif_compression_format type, const char* name_id);
 
   const struct heif_encoder_plugin* get_encoder(enum heif_compression_format type);
 

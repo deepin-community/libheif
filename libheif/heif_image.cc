@@ -21,6 +21,7 @@
 
 #include "heif_image.h"
 #include "heif_colorconversion.h"
+#include "common_utils.h"
 
 #include <cassert>
 #include <cstring>
@@ -29,44 +30,6 @@
 
 using namespace heif;
 
-
-uint8_t heif::chroma_h_subsampling(heif_chroma c)
-{
-  switch (c) {
-    case heif_chroma_monochrome:
-    case heif_chroma_444:
-      return 1;
-
-    case heif_chroma_420:
-    case heif_chroma_422:
-      return 2;
-
-    case heif_chroma_interleaved_RGB:
-    case heif_chroma_interleaved_RGBA:
-    default:
-      assert(false);
-      return 0;
-  }
-}
-
-uint8_t heif::chroma_v_subsampling(heif_chroma c)
-{
-  switch (c) {
-    case heif_chroma_monochrome:
-    case heif_chroma_444:
-    case heif_chroma_422:
-      return 1;
-
-    case heif_chroma_420:
-      return 2;
-
-    case heif_chroma_interleaved_RGB:
-    case heif_chroma_interleaved_RGBA:
-    default:
-      assert(false);
-      return 0;
-  }
-}
 
 heif_chroma heif::chroma_from_subsampling(int h, int v)
 {
@@ -227,26 +190,6 @@ bool HeifPixelImage::ImagePlane::alloc(int width, int height, int bit_depth, hei
 }
 
 
-void heif::get_subsampled_size(int width, int height,
-                               heif_channel channel,
-                               heif_chroma chroma,
-                               int* subsampled_width, int* subsampled_height)
-{
-  if (channel == heif_channel_Cb ||
-      channel == heif_channel_Cr) {
-    uint8_t chromaSubH = chroma_h_subsampling(chroma);
-    uint8_t chromaSubV = chroma_v_subsampling(chroma);
-
-    *subsampled_width = (width + chromaSubH - 1) / chromaSubH;
-    *subsampled_height = (height + chromaSubV - 1) / chromaSubV;
-  }
-  else {
-    *subsampled_width = width;
-    *subsampled_height = height;
-  }
-}
-
-
 bool HeifPixelImage::extend_padding_to_size(int width, int height)
 {
   for (auto& planeIter : m_planes) {
@@ -281,20 +224,20 @@ bool HeifPixelImage::extend_padding_to_size(int width, int height)
 
     // extend plane size
 
-    int nbytes = (plane->m_bit_depth + 7) / 8;
+    int bytes_per_pixel = (plane->m_bit_depth + 7) / 8;
 
     for (int y = 0; y < old_height; y++) {
       for (int x = old_width; x < subsampled_width; x++) {
-        memcpy(&plane->mem[y * plane->stride + x * nbytes],
-               &plane->mem[y * plane->stride + (plane->m_width - 1) * nbytes],
-               nbytes);
+        memcpy(&plane->mem[y * plane->stride + x * bytes_per_pixel],
+               &plane->mem[y * plane->stride + (plane->m_width - 1) * bytes_per_pixel],
+               bytes_per_pixel);
       }
     }
 
     for (int y = old_height; y < subsampled_height; y++) {
       memcpy(&plane->mem[y * plane->stride],
              &plane->mem[(plane->m_height - 1) * plane->stride],
-             subsampled_width * nbytes);
+             subsampled_width * bytes_per_pixel);
     }
   }
 
@@ -767,7 +710,7 @@ Error HeifPixelImage::fill_RGB_16bit(uint16_t r, uint16_t g, uint16_t b, uint16_
         val16 = a;
         break;
       default:
-        // initialization only to avoid warning of uninitalized variable.
+        // initialization only to avoid warning of uninitialized variable.
         val16 = 0;
         // Should already be detected by the check above ("m_planes.find").
         assert(false);
@@ -892,6 +835,53 @@ Error HeifPixelImage::scale_nearest_neighbor(std::shared_ptr<HeifPixelImage>& ou
   out_img->create(width, height, m_colorspace, m_chroma);
 
 
+  // --- create output image with scaled planes
+
+  if (has_channel(heif_channel_interleaved)) {
+    out_img->add_plane(heif_channel_interleaved, width, height, get_bits_per_pixel(heif_channel_interleaved));
+  }
+  else {
+    if (get_colorspace() == heif_colorspace_RGB) {
+      if (!has_channel(heif_channel_R) ||
+          !has_channel(heif_channel_G) ||
+          !has_channel(heif_channel_B)) {
+        return Error(heif_error_Invalid_input, heif_suberror_Unspecified, "RGB input without R,G,B, planes");
+      }
+
+      out_img->add_plane(heif_channel_R, width, height, get_bits_per_pixel(heif_channel_R));
+      out_img->add_plane(heif_channel_G, width, height, get_bits_per_pixel(heif_channel_G));
+      out_img->add_plane(heif_channel_B, width, height, get_bits_per_pixel(heif_channel_B));
+    }
+    else if (get_colorspace() == heif_colorspace_monochrome) {
+      if (!has_channel(heif_channel_Y)) {
+        return Error(heif_error_Invalid_input, heif_suberror_Unspecified, "monochrome input with no Y plane");
+      }
+
+      out_img->add_plane(heif_channel_Y, width, height, get_bits_per_pixel(heif_channel_Y));
+    }
+    else if (get_colorspace() == heif_colorspace_YCbCr) {
+      if (!has_channel(heif_channel_Y) ||
+          !has_channel(heif_channel_Cb) ||
+          !has_channel(heif_channel_Cr)) {
+        return Error(heif_error_Invalid_input, heif_suberror_Unspecified, "YCbCr image without Y,Cb,Cr planes");
+      }
+
+      int cw, ch;
+      get_subsampled_size(width, height, heif_channel_Cb, get_chroma_format(), &cw, &ch);
+      out_img->add_plane(heif_channel_Y, width, height, get_bits_per_pixel(heif_channel_Y));
+      out_img->add_plane(heif_channel_Cb, cw, ch, get_bits_per_pixel(heif_channel_Cb));
+      out_img->add_plane(heif_channel_Cr, cw, ch, get_bits_per_pixel(heif_channel_Cr));
+    }
+    else {
+      return Error(heif_error_Invalid_input, heif_suberror_Unspecified, "unknown color configuration");
+    }
+
+    if (has_channel(heif_channel_Alpha)) {
+      out_img->add_plane(heif_channel_Alpha, width,height, get_bits_per_pixel(heif_channel_Alpha));
+    }
+  }
+
+
   // --- scale all channels
 
   for (const auto& plane_pair : m_planes) {
@@ -900,20 +890,12 @@ Error HeifPixelImage::scale_nearest_neighbor(std::shared_ptr<HeifPixelImage>& ou
 
     const int bpp = get_storage_bits_per_pixel(channel) / 8;
 
-    int in_w = plane.m_width;
-    int in_h = plane.m_height;
-
-    int out_w = in_w * width / m_width;
-    int out_h = in_h * height / m_height;
-
-    out_img->add_plane(channel,
-                       out_w,
-                       out_h,
-                       plane.m_bit_depth);
-
-    if (!width || !height) {
-      continue;
+    if (!out_img->has_channel(channel)) {
+      return Error(heif_error_Invalid_input, heif_suberror_Unspecified, "scaling input has extra color plane");
     }
+
+    int out_w = out_img->get_width(channel);
+    int out_h = out_img->get_height(channel);
 
     int in_stride = plane.stride;
     const uint8_t* in_data = plane.mem;

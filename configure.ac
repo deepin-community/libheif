@@ -1,12 +1,12 @@
 AC_PREREQ([2.68])
-AC_INIT([libheif], [1.12.0], [opensource@struktur.de])
+AC_INIT([libheif],[1.15.1],[opensource@struktur.de])
 AC_CONFIG_SRCDIR([libheif/box.cc])
 AC_CONFIG_HEADERS([config.h])
 
 # Note: do not forget to set the version in the CMakeLists.txt file accordingly
 PROJECT_VERSION_MAJOR=1
-PROJECT_VERSION_MINOR=12
-PROJECT_VERSION_PATCH=0
+PROJECT_VERSION_MINOR=15
+PROJECT_VERSION_PATCH=1
 PROJECT_VERSION_TWEAK=0
 AC_SUBST(PROJECT_VERSION_MAJOR)
 AC_SUBST(PROJECT_VERSION_MINOR)
@@ -19,9 +19,9 @@ AC_SUBST(PROJECT_VERSION_TWEAK)
 # If any interfaces have been added since the last public release, then increment age.
 # If any interfaces have been removed or changed since the last public release, then set age to 0.
 
-LIBHEIF_CURRENT=13
-LIBHEIF_REVISION=0
-LIBHEIF_AGE=12
+LIBHEIF_CURRENT=16
+LIBHEIF_REVISION=1
+LIBHEIF_AGE=15
 AC_SUBST(LIBHEIF_CURRENT)
 AC_SUBST(LIBHEIF_REVISION)
 AC_SUBST(LIBHEIF_AGE)
@@ -85,7 +85,7 @@ AS_IF([test "x$enable_tests" = "xyes"], [
     HAVE_VISIBILITY=0
     CFLAG_VISIBILITY=
 ])
-AM_CONDITIONAL([HAVE_TESTS], [test "x$HAVE_TESTS" == "x1"])
+AM_CONDITIONAL([HAVE_TESTS], [test "x$HAVE_TESTS" = "x1"])
 
 AM_CONDITIONAL([HAVE_VISIBILITY], [test "x$HAVE_VISIBILITY" != "x0"])
 if eval "test x$enable_visibility = x" ; then enable_visibility=yes ; fi
@@ -196,7 +196,7 @@ AC_TRY_COMPILE([
     #include <stddef.h>
     #include <stdio.h>
     #include <jpeglib.h>
-],[
+], [
     jpeg_write_icc_profile(NULL, NULL, 0);
 ],[has_jpeg_write_icc_profile=yes],[has_jpeg_write_icc_profile=no]);
 AC_LANG_POP(C++)
@@ -259,15 +259,41 @@ fi
 AM_CONDITIONAL([HAVE_RAV1E], [test "x$have_rav1e" = "xyes"])
 AC_SUBST([have_rav1e])
 
-PKG_CHECK_MODULES([dav1d], [dav1d], [
-    AC_DEFINE([HAVE_DAV1D], [1], [Whether dav1d was found.])
-    AC_SUBST(dav1d_CFLAGS)
-    AC_SUBST(dav1d_LIBS)
-    have_avif_decoder="yes"
-    REQUIRES_PRIVATE="$REQUIRES_PRIVATE dav1d"
-    have_dav1d="yes"
-], [have_dav1d="no"])
+AC_ARG_ENABLE([dav1d], AS_HELP_STRING([--disable-dav1d],
+    [Disable building of dav1d decoder.]))
+if eval "test x$enable_dav1d = x" ; then enable_dav1d=yes ; fi
+if eval "test x$enable_dav1d != xno"; then
+    PKG_CHECK_MODULES([dav1d], [dav1d], [
+        AC_DEFINE([HAVE_DAV1D], [1], [Whether dav1d was found.])
+        AC_SUBST(dav1d_CFLAGS)
+        AC_SUBST(dav1d_LIBS)
+        have_avif_decoder="yes"
+        REQUIRES_PRIVATE="$REQUIRES_PRIVATE dav1d"
+        have_dav1d="yes"
+    ], [have_dav1d="no"])
+else
+    have_dav1d="no"
+fi
 AM_CONDITIONAL([HAVE_DAV1D], [test "x$have_dav1d" = "xyes"])
+AC_SUBST([have_dav1d])
+
+AC_ARG_ENABLE([svt], AS_HELP_STRING([--enable-svt],
+    [Enable building of svt-av1 encoder.]))
+if eval "test x$enable_svt = x" ; then enable_svt=no ; fi
+if eval "test x$enable_svt != xno"; then
+    PKG_CHECK_MODULES([svt], [SvtAv1Enc], [
+        AC_DEFINE([HAVE_SvtEnc], [1], [Whether SVT-AV1 was found.])
+        AC_SUBST(svt_CFLAGS)
+        AC_SUBST(svt_LIBS)
+        have_svt_encoder="yes"
+        REQUIRES_PRIVATE="$REQUIRES_PRIVATE SvtAv1Enc"
+        have_svt="yes"
+    ], [have_svt="no"])
+else
+    have_svt="no"
+fi
+AM_CONDITIONAL([HAVE_SvtEnc], [test "x$have_svt" = "xyes"])
+AC_SUBST([have_svt])
 
 AC_SUBST(have_avif_decoder)
 AC_SUBST(have_avif_encoder)
@@ -293,8 +319,10 @@ AC_ARG_ENABLE([multithreading], AS_HELP_STRING([--disable-multithreading],
 if eval "test x$enable_multithreading = x" ; then enable_multithreading=yes ; fi
 if eval "test x$enable_multithreading != xno"; then
     AC_MSG_NOTICE([Enable multithreading])
+    AC_DEFINE([ENABLE_MULTITHREADING_SUPPORT], [1], [Whether multithreading is supported.])
     AC_DEFINE([ENABLE_PARALLEL_TILE_DECODING], [1], [Whether we enable multithreaded decoding.])
 fi
+AC_SUBST(ENABLE_MULTITHREADING_SUPPORT)
 AC_SUBST(ENABLE_PARALLEL_TILE_DECODING)
 
 WARNING_FLAGS="-Wall -Werror -Wsign-compare -Wconversion -Wno-sign-conversion -Wno-error=conversion -Wno-error=unused-parameter -Wno-error=deprecated-declarations"
@@ -303,6 +331,8 @@ CXXFLAGS="$CXXFLAGS $WARNING_FLAGS"
 CFLAGS="$CFLAGS $WARNING_FLAGS"
 
 AC_C_CXX_COMPILE_FLAGS([-Wno-error=potentially-evaluated-expression])
+AC_C_CXX_COMPILE_FLAGS([-Wno-error=tautological-compare])
+AC_C_CXX_COMPILE_FLAGS([-Wno-error=tautological-constant-out-of-range-compare])
 
 AC_MSG_NOTICE([---------------------------------------])
 AC_MSG_NOTICE([Multithreading: $enable_multithreading])
@@ -311,6 +341,7 @@ AC_MSG_NOTICE([libaom decoder: $have_aom_decoder])
 AC_MSG_NOTICE([libaom encoder: $have_aom_encoder])
 AC_MSG_NOTICE([rav1e encoder: $have_rav1e])
 AC_MSG_NOTICE([dav1d decoder: $have_dav1d])
+AC_MSG_NOTICE([svt-av1 encoder: $have_svt])
 AC_MSG_NOTICE([libde265 decoder: $have_libde265])
 AC_MSG_NOTICE([libx265 encoder: $have_x265])
 AC_MSG_NOTICE([JPEG output: $have_libjpeg])
@@ -318,6 +349,11 @@ AC_MSG_NOTICE([PNG output: $have_libpng])
 AC_MSG_NOTICE([GdkPixbuf2 loader: $have_gdkpixbuf2])
 AC_MSG_NOTICE([Examples: $enable_examples])
 AC_MSG_NOTICE([Tests: $enable_tests (tests will cause 'visibility' to be turned off)])
+AC_MSG_NOTICE([---------------------------------------])
+AC_MSG_NOTICE([DEPRECATION WARNING])
+AC_MSG_NOTICE([The autotools build scripts are deprecated in favor of CMake.])
+AC_MSG_NOTICE([Please switch to a CMake building process.])
+AC_MSG_NOTICE([The 'configure' script will be removed in a future release.])
 AC_MSG_NOTICE([---------------------------------------])
 
 AC_CONFIG_FILES([Makefile])
