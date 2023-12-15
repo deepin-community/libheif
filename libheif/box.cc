@@ -36,9 +36,6 @@
 using namespace heif;
 
 
-heif::Error heif::Error::Ok(heif_error_Ok);
-
-
 Fraction::Fraction(int32_t num, int32_t den)
 {
   // Reduce resolution of fraction until we are in a safe range.
@@ -57,6 +54,14 @@ Fraction::Fraction(int32_t num, int32_t den)
     numerator /= 2;
     denominator /= 2;
   }
+}
+
+Fraction::Fraction(uint32_t num, uint32_t den)
+{
+  assert(num <= (uint32_t) std::numeric_limits<int32_t>::max());
+  assert(den <= (uint32_t) std::numeric_limits<int32_t>::max());
+
+  *this = Fraction(int32_t(num), int32_t(den));
 }
 
 Fraction Fraction::operator+(const Fraction& b) const
@@ -136,9 +141,7 @@ static std::string to_fourcc(uint32_t code)
 }
 
 
-heif::BoxHeader::BoxHeader()
-{
-}
+heif::BoxHeader::BoxHeader() = default;
 
 
 std::vector<uint8_t> heif::BoxHeader::get_type() const
@@ -232,7 +235,9 @@ heif::Error heif::BoxHeader::parse(BitstreamRange& range)
 
     if (range.prepare_read(16)) {
       m_uuid_type.resize(16);
-      range.get_istream()->read((char*) m_uuid_type.data(), 16);
+      bool success = range.get_istream()->read((char*) m_uuid_type.data(), 16);
+      assert(success);
+      (void) success;
     }
 
     m_header_size += 16;
@@ -463,6 +468,10 @@ Error Box::read(BitstreamRange& range, std::shared_ptr<heif::Box>* result)
       box = std::make_shared<Box_av1C>(hdr);
       break;
 
+    case fourcc("vvcC"):
+      box = std::make_shared<Box_vvcC>(hdr);
+      break;
+
     case fourcc("idat"):
       box = std::make_shared<Box_idat>(hdr);
       break;
@@ -489,6 +498,18 @@ Error Box::read(BitstreamRange& range, std::shared_ptr<heif::Box>* result)
 
     case fourcc("pixi"):
       box = std::make_shared<Box_pixi>(hdr);
+      break;
+
+    case fourcc("pasp"):
+      box = std::make_shared<Box_pasp>(hdr);
+      break;
+
+    case fourcc("clli"):
+      box = std::make_shared<Box_clli>(hdr);
+      break;
+
+    case fourcc("mdcv"):
+      box = std::make_shared<Box_mdcv>(hdr);
       break;
 
     default:
@@ -1053,7 +1074,7 @@ std::string Box_iloc::dump(Indent& indent) const
 
 
 Error Box_iloc::read_data(const Item& item,
-                          std::shared_ptr<StreamReader> istr,
+                          const std::shared_ptr<StreamReader>& istr,
                           const std::shared_ptr<Box_idat>& idat,
                           std::vector<uint8_t>* dest) const
 {
@@ -1120,6 +1141,7 @@ Error Box_iloc::read_data(const Item& item,
       dest->resize(static_cast<size_t>(old_size + extent.length));
       success = istr->read((char*) dest->data() + old_size, static_cast<size_t>(extent.length));
       assert(success);
+      (void) success;
     }
     else if (item.construction_method == 1) {
       if (!idat) {
@@ -1176,11 +1198,11 @@ Error Box_iloc::append_data(heif_item_id item_ID,
   Extent extent;
   extent.data = data;
 
-  if (construction_method==1) {
+  if (construction_method == 1) {
     extent.offset = m_idat_offset;
     extent.length = data.size();
 
-    m_idat_offset += (int)data.size();
+    m_idat_offset += (int) data.size();
   }
 
   m_items[idx].extents.push_back(std::move(extent));
@@ -1685,10 +1707,25 @@ Error color_profile_nclx::get_nclx_color_profile(struct heif_color_profile_nclx*
 
   struct heif_color_profile_nclx* nclx = *out_data;
 
+  struct heif_error err;
+
   nclx->version = 1;
-  nclx->color_primaries = (enum heif_color_primaries) get_colour_primaries();
-  nclx->transfer_characteristics = (enum heif_transfer_characteristics) get_transfer_characteristics();
-  nclx->matrix_coefficients = (enum heif_matrix_coefficients) get_matrix_coefficients();
+
+  err = heif_nclx_color_profile_set_color_primaries(nclx, get_colour_primaries());
+  if (err.code) {
+    return {err.code, err.subcode};
+  }
+
+  err = heif_nclx_color_profile_set_transfer_characteristics(nclx, get_transfer_characteristics());
+  if (err.code) {
+    return {err.code, err.subcode};
+  }
+
+  err = heif_nclx_color_profile_set_matrix_coefficients(nclx, get_matrix_coefficients());
+  if (err.code) {
+    return {err.code, err.subcode};
+  }
+
   nclx->full_range_flag = get_full_range_flag();
 
   // fill color primaries
@@ -1801,12 +1838,12 @@ std::string Box_colr::dump(Indent& indent) const
   std::ostringstream sstr;
   sstr << Box::dump(indent);
 
-  sstr << indent << "colour_type: " << to_fourcc(get_color_profile_type()) << "\n";
-
   if (m_color_profile) {
+    sstr << indent << "colour_type: " << to_fourcc(get_color_profile_type()) << "\n";
     sstr << m_color_profile->dump(indent);
   }
   else {
+    sstr << indent << "colour_type: ---\n";
     sstr << "no color profile\n";
   }
 
@@ -1923,6 +1960,135 @@ Error Box_pixi::write(StreamWriter& writer) const
   for (size_t i = 0; i < m_bits_per_channel.size(); i++) {
     writer.write8(m_bits_per_channel[i]);
   }
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
+Error Box_pasp::parse(BitstreamRange& range)
+{
+  //parse_full_box_header(range);
+
+  hSpacing = range.read32();
+  vSpacing = range.read32();
+
+  return range.get_error();
+}
+
+
+std::string Box_pasp::dump(Indent& indent) const
+{
+  std::ostringstream sstr;
+  sstr << Box::dump(indent);
+
+  sstr << indent << "hSpacing: " << hSpacing << "\n";
+  sstr << indent << "vSpacing: " << vSpacing << "\n";
+
+  return sstr.str();
+}
+
+
+Error Box_pasp::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  writer.write32(hSpacing);
+  writer.write32(vSpacing);
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
+Error Box_clli::parse(BitstreamRange& range)
+{
+  //parse_full_box_header(range);
+
+  clli.max_content_light_level = range.read16();
+  clli.max_pic_average_light_level = range.read16();
+
+  return range.get_error();
+}
+
+
+std::string Box_clli::dump(Indent& indent) const
+{
+  std::ostringstream sstr;
+  sstr << Box::dump(indent);
+
+  sstr << indent << "max_content_light_level: " << clli.max_content_light_level << "\n";
+  sstr << indent << "max_pic_average_light_level: " << clli.max_pic_average_light_level << "\n";
+
+  return sstr.str();
+}
+
+
+Error Box_clli::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  writer.write16(clli.max_content_light_level);
+  writer.write16(clli.max_pic_average_light_level);
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
+Error Box_mdcv::parse(BitstreamRange& range)
+{
+  //parse_full_box_header(range);
+
+  for (int c=0;c<3;c++) {
+    mdcv.display_primaries_x[c] = range.read16();
+    mdcv.display_primaries_y[c] = range.read16();
+  }
+
+  mdcv.white_point_x = range.read16();
+  mdcv.white_point_y = range.read16();
+  mdcv.max_display_mastering_luminance = range.read32();
+  mdcv.min_display_mastering_luminance = range.read32();
+
+  return range.get_error();
+}
+
+
+std::string Box_mdcv::dump(Indent& indent) const
+{
+  std::ostringstream sstr;
+  sstr << Box::dump(indent);
+
+  sstr << indent << "display_primaries (x,y): ";
+  sstr << "(" << mdcv.display_primaries_x[0] << ";" << mdcv.display_primaries_y[0] << "), ";
+  sstr << "(" << mdcv.display_primaries_x[1] << ";" << mdcv.display_primaries_y[1] << "), ";
+  sstr << "(" << mdcv.display_primaries_x[2] << ";" << mdcv.display_primaries_y[2] << ")\n";
+
+  sstr << indent << "white point (x,y): (" << mdcv.white_point_x << ";" << mdcv.white_point_y << ")\n";
+  sstr << indent << "max display mastering luminance: " << mdcv.max_display_mastering_luminance << "\n";
+  sstr << indent << "min display mastering luminance: " << mdcv.min_display_mastering_luminance << "\n";
+
+  return sstr.str();
+}
+
+
+Error Box_mdcv::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  for (int c=0;c<3;c++) {
+    writer.write16(mdcv.display_primaries_x[c]);
+    writer.write16(mdcv.display_primaries_y[c]);
+  }
+
+  writer.write16(mdcv.white_point_x);
+  writer.write16(mdcv.white_point_y);
+
+  writer.write32(mdcv.max_display_mastering_luminance);
+  writer.write32(mdcv.min_display_mastering_luminance);
 
   prepend_header(writer, box_start);
 
@@ -2188,6 +2354,14 @@ Error Box_ipma::write(StreamWriter& writer) const
 }
 
 
+void Box_ipma::insert_entries_from_other_ipma_box(const Box_ipma& b)
+{
+  m_entries.insert(m_entries.end(),
+                   b.m_entries.begin(),
+                   b.m_entries.end());
+}
+
+
 Error Box_auxC::parse(BitstreamRange& range)
 {
   parse_full_box_header(range);
@@ -2248,6 +2422,18 @@ Error Box_irot::parse(BitstreamRange& range)
 }
 
 
+Error Box_irot::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  writer.write8((uint8_t)(m_rotation / 90));
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
 std::string Box_irot::dump(Indent& indent) const
 {
   std::ostringstream sstr;
@@ -2263,15 +2449,27 @@ Error Box_imir::parse(BitstreamRange& range)
 {
   //parse_full_box_header(range);
 
-  uint16_t axis = range.read8();
+  uint8_t axis = range.read8();
   if (axis & 1) {
-    m_axis = MirrorAxis::Horizontal;
+    m_axis = MirrorDirection::Horizontal;
   }
   else {
-    m_axis = MirrorAxis::Vertical;
+    m_axis = MirrorDirection::Vertical;
   }
 
   return range.get_error();
+}
+
+
+Error Box_imir::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+  writer.write8(m_axis == MirrorDirection::Horizontal ? 1 : 0);
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
 }
 
 
@@ -2280,12 +2478,12 @@ std::string Box_imir::dump(Indent& indent) const
   std::ostringstream sstr;
   sstr << Box::dump(indent);
 
-  sstr << indent << "mirror axis: ";
+  sstr << indent << "mirror direction: ";
   switch (m_axis) {
-    case MirrorAxis::Vertical:
+    case MirrorDirection::Vertical:
       sstr << "vertical\n";
       break;
-    case MirrorAxis::Horizontal:
+    case MirrorDirection::Horizontal:
       sstr << "horizontal\n";
       break;
   }
@@ -2298,20 +2496,35 @@ Error Box_clap::parse(BitstreamRange& range)
 {
   //parse_full_box_header(range);
 
-  int32_t clean_aperture_width_num = range.read32();
-  int32_t clean_aperture_width_den = range.read32();
-  int32_t clean_aperture_height_num = range.read32();
-  int32_t clean_aperture_height_den = range.read32();
-  int32_t horizontal_offset_num = range.read32();
-  int32_t horizontal_offset_den = range.read32();
-  int32_t vertical_offset_num = range.read32();
-  int32_t vertical_offset_den = range.read32();
+  uint32_t clean_aperture_width_num = range.read32();
+  uint32_t clean_aperture_width_den = range.read32();
+  uint32_t clean_aperture_height_num = range.read32();
+  uint32_t clean_aperture_height_den = range.read32();
+
+  // Note: in the standard document 14496-12(2015), it says that the offset values should also be unsigned integers,
+  // but this is obviously an error. Even the accompanying standard text says that offsets may be negative.
+  int32_t horizontal_offset_num = (int32_t) range.read32();
+  uint32_t horizontal_offset_den = (int32_t) range.read32();
+  int32_t vertical_offset_num = (int32_t) range.read32();
+  uint32_t vertical_offset_den = (int32_t) range.read32();
+
+  if (clean_aperture_width_num > (uint32_t) std::numeric_limits<int32_t>::max() ||
+      clean_aperture_width_den > (uint32_t) std::numeric_limits<int32_t>::max() ||
+      clean_aperture_height_num > (uint32_t) std::numeric_limits<int32_t>::max() ||
+      clean_aperture_height_den > (uint32_t) std::numeric_limits<int32_t>::max() ||
+      horizontal_offset_den > (uint32_t) std::numeric_limits<int32_t>::max() ||
+      vertical_offset_den > (uint32_t) std::numeric_limits<int32_t>::max()) {
+    return Error(heif_error_Invalid_input,
+                 heif_suberror_Invalid_fractional_number,
+                 "Exceeded supported value range.");
+  }
+
   m_clean_aperture_width = Fraction(clean_aperture_width_num,
                                     clean_aperture_width_den);
   m_clean_aperture_height = Fraction(clean_aperture_height_num,
                                      clean_aperture_height_den);
-  m_horizontal_offset = Fraction(horizontal_offset_num, horizontal_offset_den);
-  m_vertical_offset = Fraction(vertical_offset_num, vertical_offset_den);
+  m_horizontal_offset = Fraction(horizontal_offset_num, (int32_t) horizontal_offset_den);
+  m_vertical_offset = Fraction(vertical_offset_num, (int32_t) vertical_offset_den);
   if (!m_clean_aperture_width.is_valid() || !m_clean_aperture_height.is_valid() ||
       !m_horizontal_offset.is_valid() || !m_vertical_offset.is_valid()) {
     return Error(heif_error_Invalid_input,
@@ -2396,18 +2609,12 @@ int Box_clap::bottom_rounded(int image_height) const
 
 int Box_clap::get_width_rounded() const
 {
-  int left = (Fraction(0, 1) - (m_clean_aperture_width - 1) / 2).round();
-  int right = ((m_clean_aperture_width - 1) / 2).round();
-
-  return right + 1 - left;
+  return m_clean_aperture_width.round();
 }
 
 int Box_clap::get_height_rounded() const
 {
-  int top = (Fraction(0, 1) - (m_clean_aperture_height - 1) / 2).round();
-  int bottom = ((m_clean_aperture_height - 1) / 2).round();
-
-  return bottom + 1 - top;
+  return m_clean_aperture_height.round();
 }
 
 void Box_clap::set(uint32_t clap_width, uint32_t clap_height,
@@ -2416,8 +2623,8 @@ void Box_clap::set(uint32_t clap_width, uint32_t clap_height,
   assert(image_width >= clap_width);
   assert(image_height >= clap_height);
 
-  m_clean_aperture_width = Fraction(clap_width, 1);
-  m_clean_aperture_height = Fraction(clap_height, 1);
+  m_clean_aperture_width = Fraction(clap_width, 1U);
+  m_clean_aperture_height = Fraction(clap_height, 1U);
 
   m_horizontal_offset = Fraction(-(int32_t) (image_width - clap_width), 2);
   m_vertical_offset = Fraction(-(int32_t) (image_height - clap_height), 2);
@@ -2572,7 +2779,7 @@ std::vector<uint32_t> Box_iref::get_references(uint32_t itemID, uint32_t ref_typ
 }
 
 
-void Box_iref::add_reference(heif_item_id from_id, uint32_t type, std::vector<heif_item_id> to_ids)
+void Box_iref::add_reference(heif_item_id from_id, uint32_t type, const std::vector<heif_item_id>& to_ids)
 {
   Reference ref;
   ref.header.set_short_type(type);
@@ -2644,7 +2851,9 @@ Error Box_hvcC::parse(BitstreamRange& range)
 
       if (range.prepare_read(size)) {
         nal_unit.resize(size);
-        range.get_istream()->read((char*) nal_unit.data(), size);
+        bool success = range.get_istream()->read((char*) nal_unit.data(), size);
+        assert(success);
+        (void) success;
       }
 
       array.m_nal_units.push_back(std::move(nal_unit));
@@ -2955,6 +3164,112 @@ std::string Box_av1C::dump(Indent& indent) const
 }
 
 
+Error Box_vvcC::parse(BitstreamRange& range)
+{
+  //parse_full_box_header(range);
+
+  uint8_t byte;
+
+  auto& c = m_configuration; // abbreviation
+
+  c.configurationVersion = range.read8();
+  c.avgFrameRate_times_256 = range.read16();
+
+  //printf("version: %d\n", c.configurationVersion);
+
+  byte = range.read8();
+  c.constantFrameRate = (byte & 0xc0) >> 6;
+  c.numTemporalLayers = (byte & 0x38) >> 3;
+  c.lengthSize = (byte & 0x06) +1;
+  c.ptl_present_flag = (byte & 0x01);
+  // assert(c.ptl_present_flag == false); // TODO   (removed the assert since it will trigger the fuzzers)
+
+  byte = range.read8();
+  c.chroma_format_present_flag = (byte & 0x80);
+  c.chroma_format_idc = (byte & 0x60) >> 5;
+
+  c.bit_depth_present_flag = (byte & 0x10);
+  c.bit_depth = ((byte & 0x0e) >> 1) + 8;
+
+  c.numOfArrays = range.read8();
+
+#if 0
+  const int64_t configOBUs_bytes = range.get_remaining_bytes();
+  m_config_OBUs.resize(configOBUs_bytes);
+
+  if (!range.read(m_config_OBUs.data(), configOBUs_bytes)) {
+    // error
+  }
+#endif
+
+  return range.get_error();
+}
+
+
+Error Box_vvcC::write(StreamWriter& writer) const
+{
+  size_t box_start = reserve_box_header_space(writer);
+
+#if 0
+  const auto& c = m_configuration; // abbreviation
+
+  writer.write8(c.version | 0x80);
+
+  writer.write8((uint8_t) (((c.seq_profile & 0x7) << 5) |
+                           (c.seq_level_idx_0 & 0x1f)));
+#endif
+
+  prepend_header(writer, box_start);
+
+  return Error::Ok;
+}
+
+
+static const char* vvc_chroma_names[4] = { "mono", "4:2:0", "4:2:2", "4:4:4" };
+
+std::string Box_vvcC::dump(Indent& indent) const
+{
+  std::ostringstream sstr;
+  sstr << Box::dump(indent);
+
+  const auto& c = m_configuration; // abbreviation
+
+  sstr << indent << "version: " << ((int) c.configurationVersion) << "\n"
+       << indent << "frame-rate: " << (c.avgFrameRate_times_256/256.0f) << "\n"
+       << indent << "constant frame rate: " << (c.constantFrameRate==1 ? "constant" : (c.constantFrameRate==2 ? "multi-layer" : "unknown")) << "\n"
+       << indent << "num temporal layers: " << ((int)c.numTemporalLayers) << "\n"
+       << indent << "length size: " << ((int) c.lengthSize) << "\n"
+       << indent << "chroma-format: ";
+  if (c.chroma_format_present_flag) {
+    sstr << vvc_chroma_names[c.chroma_format_idc] << "\n";
+  }
+  else {
+    sstr << "---\n";
+  }
+
+  sstr << indent << "bit-depth: ";
+  if (c.bit_depth_present_flag) {
+    sstr << ((int)c.bit_depth) << "\n";
+  }
+  else {
+    sstr << "---\n";
+  }
+
+  sstr << "num of arrays: " << ((int)c.numOfArrays) << "\n";
+
+#if 0
+  sstr << indent << "config OBUs:";
+  for (size_t i = 0; i < m_config_OBUs.size(); i++) {
+    sstr << " " << std::hex << std::setfill('0') << std::setw(2)
+         << ((int) m_config_OBUs[i]);
+  }
+  sstr << std::dec << "\n";
+#endif
+
+  return sstr.str();
+}
+
+
 Error Box_idat::parse(BitstreamRange& range)
 {
   //parse_full_box_header(range);
@@ -2988,7 +3303,7 @@ std::string Box_idat::dump(Indent& indent) const
 }
 
 
-Error Box_idat::read_data(std::shared_ptr<StreamReader> istr,
+Error Box_idat::read_data(const std::shared_ptr<StreamReader>& istr,
                           uint64_t start, uint64_t length,
                           std::vector<uint8_t>& out_data) const
 {
@@ -3038,6 +3353,7 @@ Error Box_idat::read_data(std::shared_ptr<StreamReader> istr,
 
     success = istr->read((char*) data, static_cast<size_t>(length));
     assert(success);
+    (void) success;
   }
 
   return Error::Ok;

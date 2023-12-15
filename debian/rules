@@ -11,9 +11,25 @@ COMMIT = $$(git log -1 --pretty=%h)
 LAST_TAG=$$(git describe --tags --abbrev=0)
 COUNT_SINCE_LAST_TAG=$$(git rev-list $(LAST_TAG).. --count)
 BASENAME=$(PKG)_$(VER)+$(COUNT_SINCE_LAST_TAG)+git$(COMMIT)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
 %:
 	dh $@
+
+override_dh_autoreconf:
+	# Skip, we will be using cmake to build.
+
+override_dh_auto_configure:
+	dh_auto_configure --buildsystem=cmake -- \
+		-DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_LIBRARY_ARCHITECTURE="$(DEB_HOST_MULTIARCH)" \
+		-DPLUGIN_DIRECTORY=/usr/lib/$(DEB_HOST_MULTIARCH)/libheif/plugins \
+		-DWITH_AOM_DECODER_PLUGIN=OFF \
+		-DWITH_AOM_ENCODER_PLUGIN=OFF \
+		-DWITH_DAV1D_PLUGIN=OFF \
+		-DWITH_DEFLATE_HEADER_COMPRESSION=ON \
+		-DWITH_LIBDE265_PLUGIN=OFF \
+		-DWITH_X265_PLUGIN=OFF
 
 UURL = git://github.com/strukturag/libheif.git
 get-head-source:

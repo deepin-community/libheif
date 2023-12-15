@@ -43,7 +43,9 @@ extern "C" {
 //  1.9.2        1             2            2             1             1            1
 //  1.10         1             2            3             1             1            1
 //  1.11         1             2            4             1             1            1
-
+//  1.13         1             3            4             1             1            1
+//  1.14         1             3            5             1             1            1
+//  1.15         1             4            5             1             1            1
 
 #if defined(_MSC_VER) && !defined(LIBHEIF_STATIC_BUILD)
 #ifdef LIBHEIF_EXPORTS
@@ -68,17 +70,20 @@ extern "C" {
 
 // Version string of linked libheif library.
 LIBHEIF_API const char* heif_get_version(void);
-// Numeric version of linked libheif library, encoded as 0xHHMMLL00 = HH.MM.LL.
+
+// Numeric version of linked libheif library, encoded as BCD 0xHHMMLL00 = HH.MM.LL.
+// For example: 0x02143000 is version 2.14.30
 LIBHEIF_API uint32_t heif_get_version_number(void);
 
-// Numeric part "HH" from above.
+// Numeric part "HH" from above. Returned as a decimal number (not BCD).
 LIBHEIF_API int heif_get_version_number_major(void);
-// Numeric part "MM" from above.
+// Numeric part "MM" from above. Returned as a decimal number (not BCD).
 LIBHEIF_API int heif_get_version_number_minor(void);
-// Numeric part "LL" from above.
+// Numeric part "LL" from above. Returned as a decimal number (not BCD).
 LIBHEIF_API int heif_get_version_number_maintenance(void);
 
 // Helper macros to check for given versions of libheif at compile time.
+// Note: h, m, l should be 2-digit BCD numbers. I.e., decimal 17 = 0x17 (BCD)
 #define LIBHEIF_MAKE_VERSION(h, m, l) ((h) << 24 | (m) << 16 | (l) << 8)
 #define LIBHEIF_HAVE_VERSION(h, m, l) (LIBHEIF_NUMERIC_VERSION >= LIBHEIF_MAKE_VERSION(h, m, l))
 
@@ -120,7 +125,10 @@ enum heif_error_code
   heif_error_Encoding_error = 9,
 
   // Application has asked for a color profile type that does not exist
-  heif_error_Color_profile_does_not_exist = 10
+  heif_error_Color_profile_does_not_exist = 10,
+
+  // Error loading a dynamic plugin
+  heif_error_Plugin_loading_error = 11
 };
 
 
@@ -207,6 +215,12 @@ enum heif_suberror_code
 
   heif_suberror_Wrong_tile_image_pixel_depth = 132,
 
+  heif_suberror_Unknown_NCLX_color_primaries = 133,
+
+  heif_suberror_Unknown_NCLX_transfer_characteristics = 134,
+
+  heif_suberror_Unknown_NCLX_matrix_coefficients = 135,
+
 
   // --- Memory_allocation_error ---
 
@@ -255,6 +269,8 @@ enum heif_suberror_code
 
   heif_suberror_Unsupported_item_construction_method = 3004,
 
+  heif_suberror_Unsupported_header_compression_method = 3005,
+
 
   // --- Encoder_plugin_error ---
 
@@ -264,6 +280,13 @@ enum heif_suberror_code
   // --- Encoding_error ---
 
   heif_suberror_Cannot_write_output_data = 5000,
+
+
+  // --- Plugin loading error ---
+
+  heif_suberror_Plugin_loading_error = 6000,        // a specific plugin file cannot be loaded
+  heif_suberror_Plugin_is_not_loaded = 6001,        // trying to remove a plugin that is not loaded
+  heif_suberror_Cannot_read_plugin_directory = 6002 // error while scanning the directory for plugins
 };
 
 
@@ -284,6 +307,60 @@ typedef uint32_t heif_item_id;
 
 
 
+// ========================= library initialization ======================
+
+// You should call heif_init() when you start using libheif and heif_deinit() when you are finished.
+// These calls are reference counted. Each call to heif_init() should be matched by one call to heif_deinit().
+// For backwards compatibility, it is not really necessary to call heif_init(), but if you don't, the plugins
+// registered by default may not be freed correctly.
+// However, this should not be mixed, i.e. one part of your program does use heif_init()/heif_deinit() and another doesn't.
+// If in doubt, enclose everything with init/deinit.
+
+struct heif_init_params
+{
+  int version;
+
+  // currently no parameters
+};
+
+
+// You may pass nullptr to get default parameters. Currently, no parameters are supported.
+LIBHEIF_API
+struct heif_error heif_init(struct heif_init_params*);
+
+LIBHEIF_API
+void heif_deinit();
+
+
+// --- Plugins are currently only supported on Unix platforms.
+
+enum heif_plugin_type
+{
+  heif_plugin_type_encoder,
+  heif_plugin_type_decoder
+};
+
+struct heif_plugin_info
+{
+  int version; // version of this info struct
+  enum heif_plugin_type type;
+  const void* plugin;
+  void* internal_handle; // for internal use only
+};
+
+LIBHEIF_API
+struct heif_error heif_load_plugin(const char* filename, struct heif_plugin_info const** out_plugin);
+
+LIBHEIF_API
+struct heif_error heif_load_plugins(const char* directory,
+                                    const struct heif_plugin_info** out_plugins,
+                                    int* out_nPluginsLoaded,
+                                    int output_array_size);
+
+LIBHEIF_API
+struct heif_error heif_unload_plugin(const struct heif_plugin_info* plugin);
+
+
 // ========================= file type check ======================
 
 enum heif_filetype_result
@@ -298,12 +375,15 @@ enum heif_filetype_result
 LIBHEIF_API
 enum heif_filetype_result heif_check_filetype(const uint8_t* data, int len);
 
+LIBHEIF_API
+int heif_check_jpeg_filetype(const uint8_t* data, int len);
+
 
 // DEPRECATED, use heif_brand2 instead
 enum heif_brand
 {
   heif_unknown_brand,
-  heif_heic, // the usual HEIF images
+  heif_heic, // HEIF image with h265
   heif_heix, // 10bit images, or anything that uses h265 with range extension
   heif_hevc, heif_hevx, // brands for image sequences
   heif_heim, // multiview
@@ -312,8 +392,12 @@ enum heif_brand
   heif_hevs, // scalable sequence
   heif_mif1, // image, any coding algorithm
   heif_msf1, // sequence, any coding algorithm
-  heif_avif,
-  heif_avis
+  heif_avif, // HEIF image with AV1
+  heif_avis,
+  heif_vvic, // VVC image
+  heif_vvis, // VVC sequence
+  heif_evbi, // EVC image
+  heif_evbs, // EVC sequence
 };
 
 // input data should be at least 12 bytes
@@ -494,6 +578,14 @@ void heif_context_debug_dump_boxes_to_file(struct heif_context* ctx, int fd);
 LIBHEIF_API
 void heif_context_set_maximum_image_size_limit(struct heif_context* ctx, int maximum_width);
 
+// If the maximum threads number is set to 0, the image tiles are decoded in the main thread.
+// This is different from setting it to 1, which will generate a single background thread to decode the tiles.
+// Note that this setting only affects libheif itself. The codecs itself may still use multi-threaded decoding.
+// You can use it, for example, in cases where you are decoding several images in parallel anyway you thus want
+// to minimize parallelism in each decoder.
+LIBHEIF_API
+void heif_context_set_max_decoding_threads(struct heif_context* ctx, int max_threads);
+
 
 // ========================= heif_image_handle =========================
 
@@ -661,8 +753,8 @@ struct heif_error heif_image_handle_get_auxiliary_image_handle(const struct heif
 
 // ------------------------- metadata (Exif / XMP) -------------------------
 
-// How many metadata blocks are attached to an image. Usually, the only metadata is
-// an "Exif" block.
+// How many metadata blocks are attached to an image. If you only want to get EXIF data,
+// set the type_filter to "Exif". Otherwise, set the type_filter to NULL.
 LIBHEIF_API
 int heif_image_handle_get_number_of_metadata_blocks(const struct heif_image_handle* handle,
                                                     const char* type_filter);
@@ -682,6 +774,8 @@ LIBHEIF_API
 const char* heif_image_handle_get_metadata_type(const struct heif_image_handle* handle,
                                                 heif_item_id metadata_id);
 
+// For EXIF, the content type is empty.
+// For XMP, the content type is "application/rdf+xml".
 LIBHEIF_API
 const char* heif_image_handle_get_metadata_content_type(const struct heif_image_handle* handle,
                                                         heif_item_id metadata_id);
@@ -800,6 +894,15 @@ struct heif_color_profile_nclx
   float color_primary_white_x, color_primary_white_y;
 };
 
+LIBHEIF_API
+struct heif_error heif_nclx_color_profile_set_color_primaries(struct heif_color_profile_nclx* nclx, uint16_t cp);
+
+LIBHEIF_API
+struct heif_error heif_nclx_color_profile_set_transfer_characteristics(struct heif_color_profile_nclx* nclx, uint16_t transfer_characteristics);
+
+LIBHEIF_API
+struct heif_error heif_nclx_color_profile_set_matrix_coefficients(struct heif_color_profile_nclx* nclx, uint16_t matrix_coefficients);
+
 // Returns 'heif_error_Color_profile_does_not_exist' when there is no NCLX profile.
 // TODO: This function does currently not return an NCLX profile if it is stored in the image bitstream.
 //       Only NCLX profiles stored as colr boxes are returned. This may change in the future.
@@ -850,7 +953,10 @@ enum heif_compression_format
   heif_compression_HEVC = 1,
   heif_compression_AVC = 2,
   heif_compression_JPEG = 3,
-  heif_compression_AV1 = 4
+  heif_compression_AV1 = 4,
+  heif_compression_VVC = 5,
+  heif_compression_EVC = 6,
+  heif_compression_JPEG2000 = 7  // ISO/IEC 15444-16:2021
 };
 
 enum heif_chroma
@@ -922,6 +1028,19 @@ struct heif_decoding_options
   // version 2 options
 
   uint8_t convert_hdr_to_8bit;
+
+  // version 3 options
+
+  // When enabled, an error is returned for invalid input. Otherwise, it will try its best and
+  // add decoding warnings to the decoded heif_image. Default is non-strict.
+  uint8_t strict_decoding;
+
+  // version 4 options
+
+  // name_id of the decoder to use for the decoding.
+  // If set to NULL (default), the highest priority decoder is chosen.
+  // The priority is defined in the plugin.
+  const char* decoder_id;
 };
 
 
@@ -1040,10 +1159,89 @@ struct heif_error heif_image_set_nclx_color_profile(struct heif_image* image,
 //LIBHEIF_API
 //void heif_image_remove_color_profile(struct heif_image* image);
 
+// Fills the image decoding warnings into the provided 'out_warnings' array.
+// The size of the array has to be provided in max_output_buffer_entries.
+// If max_output_buffer_entries==0, the number of decoder warnings is returned.
+// The function fills the warnings into the provided buffer, starting with 'first_warning_idx'.
+// It returns the number of warnings filled into the buffer.
+// Note: you can iterate through all warnings by using 'max_output_buffer_entries=1' and iterate 'first_warning_idx'.
+LIBHEIF_API
+int heif_image_get_decoding_warnings(struct heif_image* image,
+                                     int first_warning_idx,
+                                     struct heif_error* out_warnings,
+                                     int max_output_buffer_entries);
+
+// This function is only for decoder plugin implementors.
+LIBHEIF_API
+void heif_image_add_decoding_warning(struct heif_image* image,
+                                     struct heif_error err);
+
 // Release heif_image.
 LIBHEIF_API
 void heif_image_release(const struct heif_image*);
 
+
+// Note: a value of 0 for any of these values indicates that the value is undefined.
+// The unit of these values is Candelas per square meter.
+struct heif_content_light_level
+{
+  uint16_t max_content_light_level;
+  uint16_t max_pic_average_light_level;
+};
+
+LIBHEIF_API
+int heif_image_has_content_light_level(const struct heif_image*);
+
+LIBHEIF_API
+void heif_image_get_content_light_level(const struct heif_image*, struct heif_content_light_level* out);
+
+LIBHEIF_API
+void heif_image_set_content_light_level(const struct heif_image*, const struct heif_content_light_level* in);
+
+
+// Note: color coordinates are defined according to the CIE 1931 definition of x as specified in ISO 11664-1 (see also ISO 11664-3 and CIE 15).
+struct heif_mastering_display_colour_volume
+{
+  uint16_t display_primaries_x[3];
+  uint16_t display_primaries_y[3];
+  uint16_t white_point_x;
+  uint16_t white_point_y;
+  uint32_t max_display_mastering_luminance;
+  uint32_t min_display_mastering_luminance;
+};
+
+// The units for max_display_mastering_luminance and min_display_mastering_luminance is Candelas per square meter.
+struct heif_decoded_mastering_display_colour_volume
+{
+  float display_primaries_x[3];
+  float display_primaries_y[3];
+  float white_point_x;
+  float white_point_y;
+  double max_display_mastering_luminance;
+  double min_display_mastering_luminance;
+};
+
+LIBHEIF_API
+int heif_image_has_mastering_display_colour_volume(const struct heif_image*);
+
+LIBHEIF_API
+void heif_image_get_mastering_display_colour_volume(const struct heif_image*, struct heif_mastering_display_colour_volume* out);
+
+LIBHEIF_API
+void heif_image_set_mastering_display_colour_volume(const struct heif_image*, const struct heif_mastering_display_colour_volume* in);
+
+// Converts the internal numeric representation of heif_mastering_display_colour_volume to the
+// normalized values, collected in heif_decoded_mastering_display_colour_volume.
+// Values that are out-of-range are decoded to 0, indicating an undefined value (as specified in ISO/IEC 23008-2).
+LIBHEIF_API
+struct heif_error heif_mastering_display_colour_volume_decode(const struct heif_mastering_display_colour_volume* in,
+                                                              struct heif_decoded_mastering_display_colour_volume* out);
+
+LIBHEIF_API
+void heif_image_get_pixel_aspect_ratio(const struct heif_image*, uint32_t* aspect_h, uint32_t* aspect_v);
+
+LIBHEIF_API
+void heif_image_set_pixel_aspect_ratio(struct heif_image*, uint32_t aspect_h, uint32_t aspect_v);
 
 // ====================================================================================================
 //  Encoding API
@@ -1083,7 +1281,29 @@ struct heif_encoder_descriptor;
 // the parameters are provided.
 struct heif_encoder_parameter;
 
+struct heif_decoder_descriptor;
 
+// Get a list of available decoders. You can filter the encoders by compression format.
+// Use format_filter==heif_compression_undefined to get all available decoders.
+// The returned list of decoders is sorted by their priority (which is a plugin property).
+// The number of decoders is returned, which are not more than 'count' if (out_encoders != nullptr).
+// By setting out_encoders==nullptr, you can query the number of decoders, 'count' is ignored.
+LIBHEIF_API
+int heif_get_decoder_descriptors(enum heif_compression_format format_filter,
+                                 const struct heif_decoder_descriptor** out_decoders,
+                                 int count);
+
+// Return a long, descriptive name of the decoder (including version information).
+LIBHEIF_API
+const char* heif_decoder_descriptor_get_name(const struct heif_decoder_descriptor*);
+
+// Return a short, symbolic name for identifying the decoder.
+// This name should stay constant over different decoder versions.
+// Note: the returned ID may be NULL for old plugins that don't support this yet.
+LIBHEIF_API
+const char* heif_decoder_descriptor_get_id_name(const struct heif_decoder_descriptor*);
+
+// DEPRECATED: use heif_get_encoder_descriptors() instead.
 // Get a list of available encoders. You can filter the encoders by compression format and name.
 // Use format_filter==heif_compression_undefined and name_filter==NULL as wildcards.
 // The returned list of encoders is sorted by their priority (which is a plugin property).
@@ -1094,6 +1314,16 @@ int heif_context_get_encoder_descriptors(struct heif_context*, // TODO: why do w
                                          const char* name_filter,
                                          const struct heif_encoder_descriptor** out_encoders,
                                          int count);
+
+// Get a list of available encoders. You can filter the encoders by compression format and name.
+// Use format_filter==heif_compression_undefined and name_filter==NULL as wildcards.
+// The returned list of encoders is sorted by their priority (which is a plugin property).
+// Note: to get the actual encoder from the descriptors returned here, use heif_context_get_encoder().
+LIBHEIF_API
+int heif_get_encoder_descriptors(enum heif_compression_format format_filter,
+                                 const char* name_filter,
+                                 const struct heif_encoder_descriptor** out_encoders,
+                                 int count);
 
 // Return a long, descriptive name of the encoder (including version information).
 LIBHEIF_API
@@ -1291,6 +1521,20 @@ int heif_encoder_has_default(struct heif_encoder*,
                              const char* parameter_name);
 
 
+// The orientation values are defined equal to the EXIF Orientation tag.
+enum heif_orientation
+{
+  heif_orientation_normal = 1,
+  heif_orientation_flip_horizontally = 2,
+  heif_orientation_rotate_180 = 3,
+  heif_orientation_flip_vertically = 4,
+  heif_orientation_rotate_90_cw_then_flip_horizontally = 5,
+  heif_orientation_rotate_90_cw = 6,
+  heif_orientation_rotate_90_cw_then_flip_vertically = 7,
+  heif_orientation_rotate_270_cw = 8
+};
+
+
 struct heif_encoding_options
 {
   uint8_t version;
@@ -1317,6 +1561,11 @@ struct heif_encoding_options
   struct heif_color_profile_nclx* output_nclx_profile;
 
   uint8_t macOS_compatibility_workaround_no_nclx_profile;
+
+  // version 5 options
+
+  // libheif will generate irot/imir boxes to match these orientations
+  enum heif_orientation image_orientation;
 };
 
 LIBHEIF_API
@@ -1358,6 +1607,13 @@ struct heif_error heif_context_encode_thumbnail(struct heif_context*,
                                                 int bbox_size,
                                                 struct heif_image_handle** out_thumb_image_handle);
 
+enum heif_metadata_compression
+{
+  heif_metadata_compression_off,
+  heif_metadata_compression_auto,
+  heif_metadata_compression_deflate
+};
+
 // Assign 'thumbnail_image' as the thumbnail image of 'master_image'.
 LIBHEIF_API
 struct heif_error heif_context_assign_thumbnail(struct heif_context*,
@@ -1376,10 +1632,17 @@ struct heif_error heif_context_add_XMP_metadata(struct heif_context*,
                                                 const struct heif_image_handle* image_handle,
                                                 const void* data, int size);
 
+// New version of heif_context_add_XMP_metadata() with data compression (experimental).
+LIBHEIF_API
+struct heif_error heif_context_add_XMP_metadata2(struct heif_context*,
+                                                 const struct heif_image_handle* image_handle,
+                                                 const void* data, int size,
+                                                 enum heif_metadata_compression compression);
+
 // Add generic, proprietary metadata to an image. You have to specify an 'item_type' that will
 // identify your metadata. 'content_type' can be an additional type, or it can be NULL.
 // For example, this function can be used to add IPTC metadata (IIM stream, not XMP) to an image.
-// Even not standard, we propose to store IPTC data with item type="iptc", content_type=NULL.
+// Although not standard, we propose to store IPTC data with item type="iptc", content_type=NULL.
 LIBHEIF_API
 struct heif_error heif_context_add_generic_metadata(struct heif_context* ctx,
                                                     const struct heif_image_handle* image_handle,
@@ -1415,6 +1678,14 @@ void heif_image_set_premultiplied_alpha(struct heif_image* image,
 LIBHEIF_API
 int heif_image_is_premultiplied_alpha(struct heif_image* image);
 
+// This function extends the padding of the image so that it has at least the given physical size.
+// The padding border is filled with the pixels along the right/bottom border.
+// This function may be useful if you want to process the image, but have some external padding requirements.
+// The image size will not be modified if it is already larger/equal than the given physical size.
+// I.e. you cannot assume that after calling this function, the stride will be equal to min_physical_width.
+LIBHEIF_API
+struct heif_error heif_image_extend_padding_to_size(struct heif_image* image, int min_physical_width, int min_physical_height);
+
 
 
 // --- register plugins
@@ -1431,8 +1702,6 @@ struct heif_error heif_register_decoder_plugin(const struct heif_decoder_plugin*
 
 LIBHEIF_API
 struct heif_error heif_register_encoder_plugin(const struct heif_encoder_plugin*);
-
-
 
 // DEPRECATED, typo in function name
 LIBHEIF_API

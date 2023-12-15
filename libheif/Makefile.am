@@ -29,6 +29,10 @@ if HAVE_DAV1D
 ADDITIONAL_LIBS += $(dav1d_LIBS)
 endif
 
+if HAVE_SvtEnc
+ADDITIONAL_LIBS += $(svt_LIBS)
+endif
+
 libheif_la_CPPFLAGS =
 libheif_la_CFLAGS = \
   $(CFLAG_VISIBILITY) \
@@ -40,6 +44,7 @@ libheif_la_CXXFLAGS = \
   $(x265_CFLAGS) \
   $(dav1d_CFLAGS) \
   $(rav1e_CFLAGS) \
+  $(svt_CFLAGS) \
   -DLIBHEIF_EXPORTS -I$(top_srcdir)
 libheif_la_LIBADD = $(ADDITIONAL_LIBS)
 
@@ -67,6 +72,8 @@ libheif_la_SOURCES = \
   heif_context.cc \
   heif_hevc.h \
   heif_hevc.cc \
+  heif_init.h \
+  heif_init.cc \
   heif_avif.h \
   heif_avif.cc \
   heif_plugin_registry.h \
@@ -76,44 +83,54 @@ libheif_la_SOURCES = \
   heif_colorconversion.h \
   heif_colorconversion.cc \
   logging.h \
+  metadata_compression.h \
+  metadata_compression.cc \
   nclx.cc \
-  nclx.h
+  nclx.h \
+  common_utils.cc \
+  common_utils.h
 
 if HAVE_AOM_DECODER
 libheif_la_SOURCES += \
-  heif_decoder_aom.cc \
-  heif_decoder_aom.h
+  plugins/heif_decoder_aom.cc \
+  plugins/heif_decoder_aom.h
 endif
 
 if HAVE_AOM_ENCODER
 libheif_la_SOURCES += \
-  heif_encoder_aom.cc \
-  heif_encoder_aom.h
+  plugins/heif_encoder_aom.cc \
+  plugins/heif_encoder_aom.h
 endif
 
 if HAVE_LIBDE265
 libheif_la_SOURCES += \
-  heif_decoder_libde265.cc \
-  heif_decoder_libde265.h
+  plugins/heif_decoder_libde265.cc \
+  plugins/heif_decoder_libde265.h
 endif
 
 if HAVE_RAV1E
 libheif_la_SOURCES += \
-  heif_encoder_rav1e.cc \
-  heif_encoder_rav1e.h
+  plugins/heif_encoder_rav1e.cc \
+  plugins/heif_encoder_rav1e.h
 endif
 
 if HAVE_DAV1D
 libheif_la_SOURCES += \
-  heif_decoder_dav1d.cc \
-  heif_decoder_dav1d.h
+  plugins/heif_decoder_dav1d.cc \
+  plugins/heif_decoder_dav1d.h
+endif
+
+if HAVE_SvtEnc
+libheif_la_SOURCES += \
+  plugins/heif_encoder_svt.cc \
+  plugins/heif_encoder_svt.h
 endif
 
 
 if HAVE_X265
 libheif_la_SOURCES += \
-  heif_encoder_x265.cc \
-  heif_encoder_x265.h
+  plugins/heif_encoder_x265.cc \
+  plugins/heif_encoder_x265.h
 endif
 
 libheif_la_HEADERS = \
@@ -172,5 +189,11 @@ file_fuzzer_LDFLAGS = $(FUZZING_ENGINE)
 file_fuzzer_LDADD = $(ADDITIONAL_LIBS)
 file_fuzzer_SOURCES = $(libheif_la_SOURCES) file_fuzzer.cc
 
+# hack, plugin_*.h files are not used by autotools, because our autotools build scripts don't support plugins, but we need it anyways
 EXTRA_DIST = \
-  CMakeLists.txt
+  CMakeLists.txt \
+  plugins/CMakeLists.txt \
+  plugins_unix.h \
+  plugins_unix.cc \
+  plugins_windows.h \
+  plugins_windows.cc

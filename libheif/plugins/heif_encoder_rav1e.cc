@@ -18,10 +18,9 @@
  * along with libheif.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "heif.h"
-#include "heif_plugin.h"
-#include "heif_avif.h"
-#include "heif_api_structs.h"
+#include "libheif/heif.h"
+#include "libheif/heif_plugin.h"
+#include "heif_encoder_rav1e.h"
 
 #if defined(HAVE_CONFIG_H)
 #include "config.h"
@@ -58,7 +57,7 @@ struct encoder_struct_rav1e
   bool data_read = false;
 };
 
-static const char* kError_out_of_memory = "Out of memory";
+//static const char* kError_out_of_memory = "Out of memory";
 
 static const char* kParam_min_q = "min-q";
 static const char* kParam_threads = "threads";
@@ -75,7 +74,7 @@ static struct heif_error heif_error_codec_library_error = {heif_error_Encoder_pl
                                                            heif_suberror_Unspecified,
                                                            "rav1e error"};
 
-static const int RAV1E_PLUGIN_PRIORITY = 50;
+static const int RAV1E_PLUGIN_PRIORITY = 20;
 
 #define MAX_PLUGIN_NAME_LENGTH 80
 
@@ -478,57 +477,36 @@ void rav1e_query_input_colorspace2(void* encoder_raw, heif_colorspace* colorspac
 }
 
 
-void rav1e_query_encoded_size(void* encoder, uint32_t input_width, uint32_t input_height,
-                              uint32_t* encoded_width, uint32_t* encoded_height)
-{
-  *encoded_width = std::max(input_width, 16U);
-  *encoded_height = std::max(input_height, 16U);
-}
-
-
 struct heif_error rav1e_encode_image(void* encoder_raw, const struct heif_image* image,
                                      heif_image_input_class input_class)
 {
   auto* encoder = (struct encoder_struct_rav1e*) encoder_raw;
 
-  // --- round image size to minimum size
-
-  uint32_t rounded_width, rounded_height;
-  rav1e_query_encoded_size(encoder,
-                           image->image->get_width(),
-                           image->image->get_height(),
-                           &rounded_width,
-                           &rounded_height);
-
-  bool success = image->image->extend_padding_to_size(rounded_width, rounded_height);
-  if (!success) {
-    struct heif_error err = {
-        heif_error_Memory_allocation_error,
-        heif_suberror_Unspecified,
-        kError_out_of_memory
-    };
-    return err;
-  }
-
-
   const heif_chroma chroma = heif_image_get_chroma_format(image);
 
   uint8_t yShift = 0;
   RaChromaSampling chromaSampling;
+  RaChromaSamplePosition chromaPosition;
   RaPixelRange rav1eRange;
+
   if (input_class == heif_image_input_class_alpha) {
     chromaSampling = RA_CHROMA_SAMPLING_CS420; // I can't seem to get RA_CHROMA_SAMPLING_CS400 to work right now, unfortunately
+    chromaPosition = RA_CHROMA_SAMPLE_POSITION_UNKNOWN; // TODO: set to CENTER when AV1 and rav1e supports this
+    yShift = 1;
   }
   else {
     switch (chroma) {
       case heif_chroma_444:
         chromaSampling = RA_CHROMA_SAMPLING_CS444;
+        chromaPosition = RA_CHROMA_SAMPLE_POSITION_COLOCATED;
         break;
       case heif_chroma_422:
         chromaSampling = RA_CHROMA_SAMPLING_CS422;
+        chromaPosition = RA_CHROMA_SAMPLE_POSITION_COLOCATED;
         break;
       case heif_chroma_420:
         chromaSampling = RA_CHROMA_SAMPLING_CS420;
+        chromaPosition = RA_CHROMA_SAMPLE_POSITION_UNKNOWN; // TODO: set to CENTER when AV1 and rav1e supports this
         yShift = 1;
         break;
       default:
@@ -536,30 +514,36 @@ struct heif_error rav1e_encode_image(void* encoder_raw, const struct heif_image*
     }
   }
 
-  rav1eRange = RA_PIXEL_RANGE_FULL;
-  auto nclx = image->image->get_color_profile_nclx();
-  if (nclx) {
-    rav1eRange = nclx->get_full_range_flag() ? RA_PIXEL_RANGE_FULL : RA_PIXEL_RANGE_LIMITED;
+  struct heif_color_profile_nclx* nclx = nullptr;
+  heif_error err = heif_image_get_nclx_color_profile(image, &nclx);
+  if (err.code != heif_error_Ok) {
+    nclx = nullptr;
   }
 
-  int bitDepth = image->image->get_bits_per_pixel(heif_channel_Y);
+  // make sure NCLX profile is deleted at end of function
+  auto nclx_deleter = std::unique_ptr<heif_color_profile_nclx, void (*)(heif_color_profile_nclx*)>(nclx, heif_nclx_color_profile_free);
 
+  rav1eRange = RA_PIXEL_RANGE_FULL;
+  if (nclx) {
+    rav1eRange = nclx->full_range_flag ? RA_PIXEL_RANGE_FULL : RA_PIXEL_RANGE_LIMITED;
+  }
+
+  int bitDepth = heif_image_get_bits_per_pixel(image, heif_channel_Y);
 
   auto rav1eConfigRaw = rav1e_config_default();
   auto rav1eConfig = std::shared_ptr<RaConfig>(rav1eConfigRaw, [](RaConfig* c) { rav1e_config_unref(c); });
 
-  if (rav1e_config_set_pixel_format(rav1eConfig.get(), (uint8_t) bitDepth, chromaSampling,
-                                    RA_CHROMA_SAMPLE_POSITION_UNKNOWN, rav1eRange) < 0) {
+  if (rav1e_config_set_pixel_format(rav1eConfig.get(), (uint8_t) bitDepth, chromaSampling, chromaPosition, rav1eRange) < 0) {
     return heif_error_codec_library_error;
   }
 
   if (rav1e_config_parse(rav1eConfig.get(), "still_picture", "true") == -1) {
     return heif_error_codec_library_error;
   }
-  if (rav1e_config_parse_int(rav1eConfig.get(), "width", image->image->get_width()) == -1) {
+  if (rav1e_config_parse_int(rav1eConfig.get(), "width", heif_image_get_width(image, heif_channel_Y)) == -1) {
     return heif_error_codec_library_error;
   }
-  if (rav1e_config_parse_int(rav1eConfig.get(), "height", image->image->get_height()) == -1) {
+  if (rav1e_config_parse_int(rav1eConfig.get(), "height", heif_image_get_height(image, heif_channel_Y)) == -1) {
     return heif_error_codec_library_error;
   }
   if (rav1e_config_parse_int(rav1eConfig.get(), "threads", encoder->threads) == -1) {
@@ -570,9 +554,9 @@ struct heif_error rav1e_encode_image(void* encoder_raw, const struct heif_image*
       (input_class == heif_image_input_class_normal ||
        input_class == heif_image_input_class_thumbnail)) {
     if (rav1e_config_set_color_description(rav1eConfig.get(),
-                                           (RaMatrixCoefficients) nclx->get_matrix_coefficients(),
-                                           (RaColorPrimaries) nclx->get_colour_primaries(),
-                                           (RaTransferCharacteristics) nclx->get_transfer_characteristics()) == -1) {
+                                           (RaMatrixCoefficients) nclx->matrix_coefficients,
+                                           (RaColorPrimaries) nclx->color_primaries,
+                                           (RaTransferCharacteristics) nclx->transfer_characteristics) == -1) {
       return heif_error_codec_library_error;
     }
   }
@@ -603,12 +587,11 @@ struct heif_error rav1e_encode_image(void* encoder_raw, const struct heif_image*
     }
   }
 
-  auto colorProfile = image->image->get_color_profile_nclx();
-  if (auto nclxProfile = std::dynamic_pointer_cast<const heif_color_profile_nclx>(colorProfile)) {
+  if (nclx) {
     rav1e_config_set_color_description(rav1eConfig.get(),
-                                       (RaMatrixCoefficients) nclxProfile->matrix_coefficients,
-                                       (RaColorPrimaries) nclxProfile->color_primaries,
-                                       (RaTransferCharacteristics) nclxProfile->transfer_characteristics);
+                                       (RaMatrixCoefficients) nclx->matrix_coefficients,
+                                       (RaColorPrimaries) nclx->color_primaries,
+                                       (RaTransferCharacteristics) nclx->transfer_characteristics);
   }
 
   RaContext* rav1eContextRaw = rav1e_context_new(rav1eConfig.get());
@@ -628,13 +611,14 @@ struct heif_error rav1e_encode_image(void* encoder_raw, const struct heif_image*
   //} else
   {
     int strideY;
-    const uint8_t* Y = image->image->get_plane(heif_channel_Y, &strideY);
+    const uint8_t* Y = heif_image_get_plane_readonly(image, heif_channel_Y, &strideY);
     int strideCb;
-    const uint8_t* Cb = image->image->get_plane(heif_channel_Cb, &strideCb);
+    const uint8_t* Cb = heif_image_get_plane_readonly(image, heif_channel_Cb, &strideCb);
     int strideCr;
-    const uint8_t* Cr = image->image->get_plane(heif_channel_Cr, &strideCr);
+    const uint8_t* Cr = heif_image_get_plane_readonly(image, heif_channel_Cr, &strideCr);
 
-    uint32_t height = image->image->get_height();
+
+    uint32_t height = heif_image_get_height(image, heif_channel_Y);
 
     uint32_t uvHeight = (height + yShift) >> yShift;
     rav1e_frame_fill_plane(rav1eFrame.get(), 0, Y, strideY * height, strideY, byteWidth);
@@ -698,7 +682,7 @@ static const struct heif_encoder_plugin encoder_plugin_rav1e
         /* id_name */ "rav1e",
         /* priority */ RAV1E_PLUGIN_PRIORITY,
         /* supports_lossy_compression */ true,
-        /* supports_lossless_compression */ true,
+        /* supports_lossless_compression */ false,
         /* get_plugin_name */ rav1e_plugin_name,
         /* init_plugin */ rav1e_init_plugin,
         /* cleanup_plugin */ rav1e_cleanup_plugin,
@@ -721,10 +705,19 @@ static const struct heif_encoder_plugin encoder_plugin_rav1e
         /* encode_image */ rav1e_encode_image,
         /* get_compressed_data */ rav1e_get_compressed_data,
         /* query_input_colorspace (v2) */ rav1e_query_input_colorspace2,
-        /* query_encoded_size (v3) */ rav1e_query_encoded_size
+        /* query_encoded_size (v3) */ nullptr
     };
 
 const struct heif_encoder_plugin* get_encoder_plugin_rav1e()
 {
   return &encoder_plugin_rav1e;
 }
+
+
+#if PLUGIN_RAV1E
+heif_plugin_info plugin_info{
+    1,
+    heif_plugin_type_encoder,
+    &encoder_plugin_rav1e
+};
+#endif

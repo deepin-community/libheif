@@ -5,6 +5,7 @@ Maintainer: Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>
 Uploaders:
  Joachim Bauch <bauch@struktur.de>
 Build-Depends:
+ cmake,
  debhelper-compat (= 13),
  libaom-dev,
  libdav1d-dev,
@@ -14,7 +15,7 @@ Build-Depends:
  libpng-dev,
  libx265-dev,
  pkg-config
-Standards-Version: 4.5.1
+Standards-Version: 4.6.2
 Rules-Requires-Root: no
 Homepage: http://www.libheif.org
 Vcs-Git: https://salsa.debian.org/multimedia-team/libheif.git
@@ -88,6 +89,7 @@ Depends:
  libheif1 (= ${binary:Version}),
  ${misc:Depends},
  ${shlibs:Depends}
+Multi-Arch: same
 Description: ISO/IEC 23008-12:2017 HEIF file format decoder - gdk-pixbuf loader
  libheif is an ISO/IEC 23008-12:2017 HEIF file format decoder. HEIF is a new
  image file format employing HEVC (h.265) image coding for the best compression

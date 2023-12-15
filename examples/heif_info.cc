@@ -95,8 +95,19 @@ void show_help(const char* argv0)
   fprintf(stderr, "  -h, --help           show help\n");
 }
 
+
+class LibHeifInitializer {
+public:
+  LibHeifInitializer() { heif_init(nullptr); }
+  ~LibHeifInitializer() { heif_deinit(); }
+};
+
+
 int main(int argc, char** argv)
 {
+  // This takes care of initializing libheif and also deinitializing it at the end to free all resources.
+  LibHeifInitializer initializer;
+
   bool dump_boxes = false;
 
   bool write_raw_image = false;
@@ -335,6 +346,84 @@ int main(int argc, char** argv)
 
       heif_image_handle_release(depth_handle);
     }
+
+    // --- metadata
+
+    int numMetadata = heif_image_handle_get_number_of_metadata_blocks(handle, nullptr);
+    printf("metadata:\n");
+    if (numMetadata>0) {
+      std::vector<heif_item_id> ids(numMetadata);
+      heif_image_handle_get_list_of_metadata_block_IDs(handle, nullptr, ids.data(), numMetadata);
+
+      for (int n=0;n<numMetadata;n++) {
+        std::string itemtype = heif_image_handle_get_metadata_type(handle, ids[n]);
+        std::string contenttype = heif_image_handle_get_metadata_content_type(handle, ids[n]);
+        std::string ID{"unknown"};
+        if (itemtype=="Exif") {
+          ID = itemtype;
+        }
+        else if (contenttype=="application/rdf+xml") {
+          ID = "XMP";
+        }
+        else {
+          ID = itemtype + "/" + contenttype;
+        }
+
+        printf("  %s: %zu bytes\n",ID.c_str(), heif_image_handle_get_metadata_size(handle,ids[n]));
+      }
+    }
+    else {
+      printf("  none\n");
+    }
+
+
+    struct heif_image* image;
+    err = heif_decode_image(handle,
+                            &image,
+                            heif_colorspace_undefined,
+                            heif_chroma_undefined,
+                            nullptr);
+    if (err.code) {
+      heif_image_handle_release(handle);
+      std::cerr << "Could not decode image " << err.message << "\n";
+      return 1;
+    }
+
+    if (image) {
+      uint32_t aspect_h, aspect_v;
+      heif_image_get_pixel_aspect_ratio(image, &aspect_h, &aspect_v);
+      if (aspect_h != aspect_v) {
+        std::cout << "pixel aspect ratio: " << aspect_h << "/" << aspect_v << "\n";
+      }
+
+      if (heif_image_has_content_light_level(image)) {
+        struct heif_content_light_level clli{};
+        heif_image_get_content_light_level(image, &clli);
+        std::cout << "content light level (clli):\n"
+                  << "  max content light level: " << clli.max_content_light_level << "\n"
+                  << "  max pic average light level: " << clli.max_pic_average_light_level << "\n";
+      }
+
+      if (heif_image_has_mastering_display_colour_volume(image)) {
+        struct heif_mastering_display_colour_volume mdcv;
+        heif_image_get_mastering_display_colour_volume(image, &mdcv);
+
+        struct heif_decoded_mastering_display_colour_volume decoded_mdcv;
+        err = heif_mastering_display_colour_volume_decode(&mdcv, &decoded_mdcv);
+
+        std::cout << "mastering display color volume:\n"
+                  << "  display_primaries (x,y): "
+                  << "(" << decoded_mdcv.display_primaries_x[0] << ";" << decoded_mdcv.display_primaries_y[0] << "), "
+                  << "(" << decoded_mdcv.display_primaries_x[1] << ";" << decoded_mdcv.display_primaries_y[1] << "), "
+                  << "(" << decoded_mdcv.display_primaries_x[2] << ";" << decoded_mdcv.display_primaries_y[2] << ")\n";
+
+        std::cout << "  white point (x,y): (" << decoded_mdcv.white_point_x << ";" << decoded_mdcv.white_point_y << ")\n";
+        std::cout << "  max display mastering luminance: " << decoded_mdcv.max_display_mastering_luminance << "\n";
+        std::cout << "  min display mastering luminance: " << decoded_mdcv.min_display_mastering_luminance << "\n";
+      }
+    }
+
+    heif_image_release(image);
 
     heif_image_handle_release(handle);
   }
