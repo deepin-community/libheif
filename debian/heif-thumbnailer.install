@@ -1,4 +1,3 @@
 usr/bin/heif-thumbnailer
 usr/share/man/*/heif-thumbnailer.*
-usr/share/mime/packages/*
 usr/share/thumbnailers/*

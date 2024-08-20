@@ -1,8 +1,151 @@
-libheif (1.12.0-deepin1) unstable; urgency=medium
+libheif (1.18.1-1) unstable; urgency=medium
 
-  * Rebuild
+  * New upstream version 1.18.1
+  * Remove patches now part of the upstream release.
+  * Add patch to fix detection of OpenJPEG 2 in Debian.
+  * Update libheif-examples for renamed and symlinked tool.
+  * Update symbols for new upstream version.
+  * d/copyright: Add more details and update for new upstream version.
+  * Add symlink for manpage of renamed and symlinked tool from libheif-examples.
+  * Update package descriptions.
 
- -- Deepin Packages Builder <packages@deepin.org>  Fri, 11 Nov 2022 17:59:27 +0800
+ -- Joachim Bauch <bauch@struktur.de>  Thu, 01 Aug 2024 12:13:56 +0200
+
+libheif (1.17.6-4) unstable; urgency=medium
+
+  * Add kvazaar plugin (Closes: #1072007).
+  * d/copyright: Update DEP-5 license ids, add missing exceptions.
+
+ -- Joachim Bauch <bauch@struktur.de>  Mon, 24 Jun 2024 09:43:29 +0200
+
+libheif (1.17.6-3) unstable; urgency=medium
+
+  * Team upload
+  * Stop building rav1e plugin on i386
+  * On Ubuntu, demote libheif-plugin-x265 to Suggests
+    and prefer libheif-plugin-aomdec to libheif-plugin-dav1d (LP: #2061089)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Thu, 06 Jun 2024 10:10:36 -0400
+
+libheif (1.17.6-2) unstable; urgency=medium
+
+  [ Dylan Aïssi ]
+  * Cherry-pick upstream patches:
+      - a911b26: Fix compilation with libsvtav1 2.0.0 (Closes: #1072335)
+      - 877de6b: fix memory leaks (CVE-2024-25269)
+
+  [ Joachim Bauch ]
+  * d/control: Update "Standards-Version" to 4.7.0
+  * Migrate from "pkg-config" to "pkgconf".
+
+ -- Joachim Bauch <bauch@struktur.de>  Mon, 03 Jun 2024 13:28:11 +0200
+
+libheif (1.17.6-1) unstable; urgency=medium
+
+  * New upstream version 1.17.6
+  * Fixes CVE-2023-49460, CVE-2023-49462, CVE-2023-49463,
+    CVE-2023-49464 (Closes: #1059151).
+  * Remove patch now applied upstream.
+
+ -- Joachim Bauch <bauch@struktur.de>  Thu, 21 Dec 2023 10:45:41 +0100
+
+libheif (1.17.4-1) unstable; urgency=medium
+
+  * New upstream version 1.17.4
+  * Add patch to fix installing thumbnailer file.
+
+ -- Joachim Bauch <bauch@struktur.de>  Tue, 21 Nov 2023 10:03:52 +0100
+
+libheif (1.17.1-1) unstable; urgency=medium
+
+  * New upstream version 1.17.1
+
+ -- Joachim Bauch <bauch@struktur.de>  Mon, 23 Oct 2023 11:04:57 +0200
+
+libheif (1.17.0-1) unstable; urgency=medium
+
+  * New upstream version 1.17.0
+    - Fix loading of plugins in some cases (Closes: #1041242, #1043506)
+  * Update symbols for new upstream version.
+  * Update codec selection for new upstream version.
+  * Build new codec plugins (ffmpegdec, jpeg{dec,enc}, j2k{dec,enc}).
+  * Pass path to plugins when running tests.
+
+ -- Joachim Bauch <bauch@struktur.de>  Mon, 16 Oct 2023 14:30:23 +0200
+
+libheif (1.16.2-3) unstable; urgency=medium
+
+  * Team upload
+  * Explicitly enable sharpyuv and have libheif-dev depend on libsharpyuv-dev
+    per its pkgconfig file. Previously this was an automagic dependency
+    and the pkgconfig file broke with a binNMU (Closes: #1052932)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sat, 30 Sep 2023 05:23:55 -0400
+
+libheif (1.16.2-2) unstable; urgency=medium
+
+  [ Pino Toscano ]
+  * Enable the rav1e plugin only on archs where librav1e is available
+
+  [ Fabian Greffrath ]
+  * Let the libheif1 package depend on at least one HEIF and AVIF decoder plugin
+    (Closes: #1040520)
+
+ -- Joachim Bauch <bauch@struktur.de>  Mon, 17 Jul 2023 09:21:51 +0200
+
+libheif (1.16.2-1) unstable; urgency=medium
+
+  [ Sebastian Ramacher ]
+  * Use libgdk-pixbuf-2.0-dev
+  * Set MA for heif-gdk-pixbuf and heif-thumbnailer (Closes: #981551)
+
+  [ Joachim Bauch ]
+  * New upstream version 1.16.2
+  * Update symbols for new upstream version.
+  * Build codecs as plugins and separate packages that are pulled using
+    "Recommends".
+  * Add codec plugins using "rav1e" and "svtenc".
+  * Remove duplicate MA entry in heif-gdk-pixbuf.
+  * d/rules: No need to override "dh_autoreconf", no longer used.
+
+ -- Joachim Bauch <bauch@struktur.de>  Tue, 20 Jun 2023 11:37:08 +0200
+
+libheif (1.15.1-1) unstable; urgency=medium
+
+  * Team upload
+  * New upstream version 1.15.1
+    - Fix CVE-2023-0996 (Closes: #1032101)
+    - Do not fail if no plugin directory is available (Closes: #1029668)
+  * debian/libheif1.symbols: Add new symbols
+  * debian/*.install: Update for new upstream release
+
+ -- Sebastian Ramacher <sramacher@debian.org>  Thu, 02 Mar 2023 00:09:34 +0100
+
+libheif (1.14.2-1) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Apply multi-arch hints. + heif-gdk-pixbuf: Add Multi-Arch: same.
+
+  [ Joachim Bauch ]
+  * New upstream version 1.14.2
+  * Update symbols for new upstream version.
+  * Switch to cmake and use arch-dependent include directory.
+  * Update "Standards-Version" to 4.6.2
+
+ -- Joachim Bauch <bauch@struktur.de>  Tue, 17 Jan 2023 10:17:32 +0100
+
+libheif (1.13.0-1) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
+    Repository-Browse.
+
+  [ Joachim Bauch ]
+  * New upstream version 1.13.0
+  * Update symbols for new upstream version.
+  * Update "Standards-Version" to 4.6.1
+
+ -- Joachim Bauch <bauch@struktur.de>  Fri, 02 Sep 2022 13:20:39 +0200
 
 libheif (1.12.0-2) unstable; urgency=medium
 
