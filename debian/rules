@@ -11,9 +11,59 @@ COMMIT = $$(git log -1 --pretty=%h)
 LAST_TAG=$$(git describe --tags --abbrev=0)
 COUNT_SINCE_LAST_TAG=$$(git rev-list $(LAST_TAG).. --count)
 BASENAME=$(PKG)_$(VER)+$(COUNT_SINCE_LAST_TAG)+git$(COMMIT)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+DEB_HOST_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+
+rav1e_archs = $(shell sed -n 's/.*\blibrav1e-dev[[:space:]]*\[\(.*\)\].*/\1/p' debian/control)
 
 %:
 	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure --buildsystem=cmake -- \
+		-DCMAKE_INSTALL_INCLUDEDIR=include/$(DEB_HOST_MULTIARCH) \
+		-DCMAKE_LIBRARY_ARCHITECTURE="$(DEB_HOST_MULTIARCH)" \
+		-DPLUGIN_DIRECTORY=/usr/lib/$(DEB_HOST_MULTIARCH)/libheif/plugins \
+		-DWITH_AOM_DECODER_PLUGIN=ON \
+		-DWITH_AOM_ENCODER_PLUGIN=ON \
+		-DWITH_DAV1D=ON \
+		-DWITH_DAV1D_PLUGIN=ON \
+		-DWITH_DEFLATE_HEADER_COMPRESSION=ON \
+		-DWITH_FFMPEG_DECODER=ON \
+		-DWITH_FFMPEG_DECODER_PLUGIN=ON \
+		-DWITH_JPEG_DECODER=ON \
+		-DWITH_JPEG_DECODER_PLUGIN=ON \
+		-DWITH_JPEG_ENCODER=ON \
+		-DWITH_JPEG_ENCODER_PLUGIN=ON \
+		-DWITH_KVAZAAR=OFF \
+		-DWITH_KVAZAAR_PLUGIN=OFF \
+		-DWITH_LIBDE265_PLUGIN=ON \
+		-DWITH_LIBSHARPYUV=OFF \
+		-DWITH_OpenJPEG_DECODER=ON \
+		-DWITH_OpenJPEG_DECODER_PLUGIN=ON \
+		-DWITH_OpenJPEG_ENCODER=ON \
+		-DWITH_OpenJPEG_ENCODER_PLUGIN=ON \
+		-DWITH_X265_PLUGIN=ON \
+		-DWITH_RAV1E=OFF \
+		-DWITH_RAV1E_PLUGIN=OFF \
+		-DWITH_SvtEnc=OFF \
+		-DWITH_SvtEnc_PLUGIN=OFF \
+		-DWITH_UNCOMPRESSED_CODEC=ON
+
+override_dh_auto_test:
+
+# some dependencies are in Ubuntu "universe"
+# https://launchpad.net/bugs/2004453 https://launchpad.net/bugs/2004446
+override_dh_gencontrol:
+ifeq ($(shell dpkg-vendor --query vendor),Ubuntu)
+	dh_gencontrol -- \
+		-Vlibheif:Depends='libheif-plugin-aomdec (= $${binary:Version}) | libheif-plugin-dav1d (= $${binary:Version})' \
+		-Vlibheif:Suggests:'libheif-plugin-x265 (= $${binary:Version})'
+else
+	dh_gencontrol -- \
+		-Vlibheif:Depends='libheif-plugin-dav1d (= $${binary:Version}) | libheif-plugin-aomdec (= $${binary:Version})' \
+		-Vlibheif:Recommends:'libheif-plugin-x265 (= $${binary:Version})'
+endif
 
 UURL = git://github.com/strukturag/libheif.git
 get-head-source:
