@@ -1,3 +1,10 @@
+libheif (1.18.1-1deepin1) unstable; urgency=medium
+
+  * Fix CVE-2025-68431: heap buffer over-read in
+    HeifPixelImage::overlay()
+
+ -- deepin-ci-robot <packages@deepin.org>  Sun, 17 May 2026 03:17:40 +0800
+
 libheif (1.18.1-1deepin0) unstable; urgency=medium
 
   * No source change upload against GCC 12.
