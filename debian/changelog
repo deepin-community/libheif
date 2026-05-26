@@ -1,3 +1,13 @@
+libheif (1.18.1-1deepin1) unstable; urgency=medium
+
+  * Fix CVE-2025-68431, CVE-2026-3949: heap buffer over-read and out-of-
+    bounds read vulnerabilities.  CVE-2025-43966, CVE-2025-43967, CVE-
+    2026-3950: NOT-AFFECTED - vulnerable code does not exist in version
+    1.18.1 (image-items/iden.cc, image-items/grid.cc, sequences/track.cc
+    not present).
+
+ -- deepin-ci-robot <packages@deepin.org>  Wed, 27 May 2026 03:41:10 +0800
+
 libheif (1.18.1-1deepin0) unstable; urgency=medium
 
   * No source change upload against GCC 12.
