@@ -3,7 +3,7 @@ Section: libs
 Priority: optional
 Maintainer: Debian Multimedia Maintainers <debian-multimedia@lists.debian.org>
 Uploaders:
- Joachim Bauch <bauch@struktur.de>
+ Joachim Bauch <fancycode@debian.org>
 Build-Depends:
  cmake,
  debhelper-compat (= 13),
@@ -11,16 +11,20 @@ Build-Depends:
  libavcodec-dev,
  libdav1d-dev,
  libde265-dev (>= 1.0.7),
-# libgdk-pixbuf-2.0-dev,
+ libgdk-pixbuf-2.0-dev,
  libjpeg-dev,
-# libkvazaar-dev,
+ libkvazaar-dev,
  libopenjp2-7-dev,
  libpng-dev,
-# librav1e-dev [amd64 arm64 armel armhf mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x],
-# libsharpyuv-dev,
-# libsvtav1enc-dev,
- libx265-dev
-Standards-Version: 4.7.0
+# librav1e-dev is built by src:rust-rav1e which is not available on all platforms.
+# Make sure to use the same list in the "libheif-plugin-rav1e" package below.
+ librav1e-dev [amd64 arm64 armel armhf mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x],
+ libsharpyuv-dev,
+ libsvtav1enc-dev,
+ libx265-dev,
+ libz-dev,
+ pkgconf
+Standards-Version: 4.7.2
 Rules-Requires-Root: no
 Homepage: http://www.libheif.org
 Vcs-Git: https://salsa.debian.org/multimedia-team/libheif.git
@@ -45,7 +49,7 @@ Suggests:
  libheif-plugin-j2kdec (= ${binary:Version}),
  libheif-plugin-j2kenc (= ${binary:Version}),
  libheif-plugin-kvazaar (= ${binary:Version}),
- libheif-plugin-rav1e (= ${binary:Version}),
+ libheif-plugin-rav1e (= ${binary:Version}) [amd64 arm64 armel armhf mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x],
  libheif-plugin-svtenc (= ${binary:Version})
 Description: HEIF and AVIF file format decoder and encoder - shared library
  libheif is an ISO/IEC 23008-12:2017 HEIF and AVIF (AV1 Image File Format) file
@@ -56,7 +60,7 @@ Description: HEIF and AVIF file format decoder and encoder - shared library
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the shared library.
 
@@ -76,9 +80,11 @@ Description: HEIF and AVIF file format decoder and encoder - aomdec plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the aomdec plugin that uses libaom to decode AV1 images.
+ .
+ libaom: https://aomedia.org/
 
 Package: libheif-plugin-aomenc
 Architecture: any
@@ -96,9 +102,11 @@ Description: HEIF and AVIF file format decoder and encoder - aomenc plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the aomenc plugin that uses libaom to encode AV1 images.
+ .
+ libaom: https://aomedia.org/
 
 Package: libheif-plugin-dav1d
 Architecture: any
@@ -116,9 +124,11 @@ Description: HEIF and AVIF file format decoder and encoder - dav1d plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the dav1d plugin that uses dav1d to decode AV1 images.
+ .
+ dav1d: https://www.videolan.org/projects/dav1d.html
 
 Package: libheif-plugin-ffmpegdec
 Architecture: any
@@ -136,10 +146,12 @@ Description: HEIF and AVIF file format decoder and encoder - ffmpegdec plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the ffmpegdec plugin that uses FFmpeg to decode HEVC
  images. It can make use of H265 hardware decoders if available in FFmpeg.
+ .
+ FFmpeg: https://www.ffmpeg.org/
 
 Package: libheif-plugin-j2kdec
 Architecture: any
@@ -157,10 +169,12 @@ Description: HEIF and AVIF file format decoder and encoder - j2kdec plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the j2kdec plugin that uses OpenJPEG to decode JPEG2000
  images.
+ .
+ OpenJPEG: https://www.openjpeg.org/
 
 Package: libheif-plugin-j2kenc
 Architecture: any
@@ -178,10 +192,12 @@ Description: HEIF and AVIF file format decoder and encoder - j2kenc plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the j2kenc plugin that uses OpenJPEG to encode JPEG2000
  images.
+ .
+ OpenJPEG: https://www.openjpeg.org/
 
 Package: libheif-plugin-jpegdec
 Architecture: any
@@ -199,10 +215,12 @@ Description: HEIF and AVIF file format decoder and encoder - jpegdec plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the jpegdec plugin that uses libjpeg to decode JPEG
  images.
+ .
+ libjpeg: https://www.libjpeg-turbo.org/
 
 Package: libheif-plugin-jpegenc
 Architecture: any
@@ -220,10 +238,12 @@ Description: HEIF and AVIF file format decoder and encoder - jpegenc plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the jpegenc plugin that uses libjpeg to encode JPEG
  images.
+ .
+ libjpeg: https://www.libjpeg-turbo.org/
 
 Package: libheif-plugin-kvazaar
 Architecture: any
@@ -241,10 +261,12 @@ Description: HEIF and AVIF file format decoder and encoder - kvazaar plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the kvazaar plugin that uses kvazaar to encode HEVC
  images.
+ .
+ kvazaar: https://ultravideo.fi/kvazaar.html
 
 Package: libheif-plugin-libde265
 Architecture: any
@@ -262,10 +284,12 @@ Description: HEIF and AVIF file format decoder and encoder - libde265 plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the libde265 plugin that uses libde265 to decode HEVC
  images.
+ .
+ libde265: https://www.libde265.org/
 
 Package: libheif-plugin-rav1e
 Architecture: amd64 arm64 armel armhf mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x
@@ -283,9 +307,11 @@ Description: HEIF and AVIF file format decoder and encoder - rav1e plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the rav1e plugin that uses rav1e to encode AV1 images.
+ .
+ rav1e: https://github.com/xiph/rav1e
 
 Package: libheif-plugin-svtenc
 Architecture: any
@@ -303,9 +329,11 @@ Description: HEIF and AVIF file format decoder and encoder - svtenc plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the svtenc plugin that uses SVT-AV1 to encode AV1 images.
+ .
+ SVT-AV1: https://gitlab.com/AOMediaCodec/SVT-AV1
 
 Package: libheif-plugin-x265
 Architecture: any
@@ -323,9 +351,42 @@ Description: HEIF and AVIF file format decoder and encoder - x265 plugin
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  This package contains the x265 plugin that uses x265 to encode HEVC images.
+ .
+ x265: https://www.videolan.org/developers/x265.html
+
+Package: libheif-plugins-all
+Architecture: any
+Multi-Arch: same
+Depends:
+ libheif-plugin-aomdec (>= ${source:Version}),
+ libheif-plugin-aomenc (>= ${source:Version}),
+ libheif-plugin-dav1d (>= ${source:Version}),
+ libheif-plugin-ffmpegdec (>= ${source:Version}),
+ libheif-plugin-j2kdec (>= ${source:Version}),
+ libheif-plugin-j2kenc (>= ${source:Version}),
+ libheif-plugin-jpegdec (>= ${source:Version}),
+ libheif-plugin-jpegenc (>= ${source:Version}),
+ libheif-plugin-kvazaar (>= ${source:Version}),
+ libheif-plugin-libde265 (>= ${source:Version}),
+ libheif-plugin-rav1e (>= ${source:Version}) [amd64 arm64 armel armhf mips64el mipsel powerpc ppc64 ppc64el riscv64 s390x],
+ libheif-plugin-svtenc (>= ${source:Version}),
+ libheif-plugin-x265 (>= ${source:Version}),
+ ${misc:Depends}
+Description: HEIF and AVIF file format decoder and encoder - plugins metapackage
+ libheif is an ISO/IEC 23008-12:2017 HEIF and AVIF (AV1 Image File Format) file
+ format decoder and encoder. There is partial support for ISO/IEC 23008-12:2022
+ (2nd Edition) capabilities.
+ .
+ HEIF and AVIF are new image file formats employing HEVC (H.265) or AV1 image
+ coding, respectively, for the best compression ratios currently possible.
+ .
+ libheif supports various codecs provided by plugins for image decoding and
+ encoding.
+ .
+ This is a metapackage depending on all available plugins for libheif.
 
 Package: libheif-dev
 Section: libdevel
@@ -333,10 +394,8 @@ Multi-Arch: same
 Architecture: any
 Depends:
  libheif1 (= ${binary:Version}),
- libaom-dev,
- libdav1d-dev,
- libde265-dev (>= 1.0.7),
- libx265-dev,
+ libsharpyuv-dev,
+ libz-dev,
  ${misc:Depends}
 Description: HEIF and AVIF file format decoder and encoder - development files
  libheif is an ISO/IEC 23008-12:2017 HEIF and AVIF (AV1 Image File Format) file
@@ -347,7 +406,7 @@ Description: HEIF and AVIF file format decoder and encoder - development files
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  The development headers for compiling programs that use libheif are provided
  by this package.
@@ -368,7 +427,7 @@ Description: HEIF and AVIF file format decoder and encoder - examples
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  Sample applications using libheif are provided by this package.
 
@@ -389,7 +448,7 @@ Description: HEIF and AVIF file format decoder and encoder - thumbnailer
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  A thumbnailer for HEIF images that can be used by Nautilus is provided by this
  package.
@@ -411,7 +470,7 @@ Description: HEIF and AVIF file format decoder and encoder - gdk-pixbuf loader
  coding, respectively, for the best compression ratios currently possible.
  .
  libheif supports various codecs provided by plugins for image decoding and
- encoding,
+ encoding.
  .
  A gdk-pixbuf loader module for applications such as "gpicview" and "pcmanfm"
  is provided by this package.

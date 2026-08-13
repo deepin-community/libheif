@@ -243,7 +243,7 @@ static emscripten::val heif_js_decode_image2(struct heif_image_handle* handle,
   int height = heif_image_handle_get_height(handle);
   result.set("height", height);
 
-  std::basic_string<unsigned char> data;
+  std::vector<unsigned char> data;
   result.set("chroma", heif_image_get_chroma_format(image));
   result.set("colorspace", heif_image_get_colorspace(image));
 
@@ -273,6 +273,8 @@ static emscripten::val heif_js_decode_image2(struct heif_image_handle* handle,
 
       val_channel_info.set("width", heif_image_get_width(image, channel));
       val_channel_info.set("height", heif_image_get_height(image, channel));
+
+      val_channel_info.set("bits_per_pixel", heif_image_get_bits_per_pixel_range(image, channel));
 
       val_channels.call<void>("push", val_channel_info);
     }
@@ -327,7 +329,8 @@ EMSCRIPTEN_BINDINGS(libheif) {
     .value("heif_error_Decoder_plugin_error", heif_error_Decoder_plugin_error)
     .value("heif_error_Encoder_plugin_error", heif_error_Encoder_plugin_error)
     .value("heif_error_Encoding_error", heif_error_Encoding_error)
-    .value("heif_error_Color_profile_does_not_exist", heif_error_Color_profile_does_not_exist);
+    .value("heif_error_Color_profile_does_not_exist", heif_error_Color_profile_does_not_exist)
+    .value("heif_error_Canceled", heif_error_Canceled);
     emscripten::enum_<heif_suberror_code>("heif_suberror_code")
     .value("heif_suberror_Unspecified", heif_suberror_Unspecified)
     .value("heif_suberror_Cannot_write_output_data", heif_suberror_Cannot_write_output_data)
@@ -359,6 +362,8 @@ EMSCRIPTEN_BINDINGS(libheif) {
     .value("heif_suberror_Invalid_grid_data", heif_suberror_Invalid_grid_data)
     .value("heif_suberror_Missing_grid_images", heif_suberror_Missing_grid_images)
     .value("heif_suberror_No_av1C_box", heif_suberror_No_av1C_box)
+    .value("heif_suberror_No_avcC_box", heif_suberror_No_avcC_box)
+    .value("heif_suberror_Invalid_mini_box", heif_suberror_Invalid_mini_box)
     .value("heif_suberror_Invalid_clean_aperture", heif_suberror_Invalid_clean_aperture)
     .value("heif_suberror_Invalid_overlay_data", heif_suberror_Invalid_overlay_data)
     .value("heif_suberror_Overlay_image_outside_of_canvas", heif_suberror_Overlay_image_outside_of_canvas)
@@ -389,6 +394,7 @@ EMSCRIPTEN_BINDINGS(libheif) {
     .value("heif_suberror_Unsupported_image_type", heif_suberror_Unsupported_image_type)
     .value("heif_suberror_Unsupported_data_version", heif_suberror_Unsupported_data_version)
     .value("heif_suberror_Unsupported_generic_compression_method", heif_suberror_Unsupported_generic_compression_method)
+    .value("heif_suberror_Unsupported_essential_property", heif_suberror_Unsupported_essential_property)
     .value("heif_suberror_Unsupported_color_conversion", heif_suberror_Unsupported_color_conversion)
     .value("heif_suberror_Unsupported_item_construction_method", heif_suberror_Unsupported_item_construction_method)
     .value("heif_suberror_Unsupported_header_compression_method", heif_suberror_Unsupported_header_compression_method)
@@ -441,7 +447,8 @@ EMSCRIPTEN_BINDINGS(libheif) {
     .value("heif_colorspace_undefined", heif_colorspace_undefined)
     .value("heif_colorspace_YCbCr", heif_colorspace_YCbCr)
     .value("heif_colorspace_RGB", heif_colorspace_RGB)
-    .value("heif_colorspace_monochrome", heif_colorspace_monochrome);
+    .value("heif_colorspace_monochrome", heif_colorspace_monochrome)
+    .value("heif_colorspace_nonvisual", heif_colorspace_nonvisual);
     emscripten::enum_<heif_channel>("heif_channel")
     .value("heif_channel_Y", heif_channel_Y)
     .value("heif_channel_Cr", heif_channel_Cr)
@@ -450,7 +457,11 @@ EMSCRIPTEN_BINDINGS(libheif) {
     .value("heif_channel_G", heif_channel_G)
     .value("heif_channel_B", heif_channel_B)
     .value("heif_channel_Alpha", heif_channel_Alpha)
-    .value("heif_channel_interleaved", heif_channel_interleaved);
+    .value("heif_channel_interleaved", heif_channel_interleaved)
+    .value("heif_channel_filter_array", heif_channel_filter_array)
+    .value("heif_channel_depth", heif_channel_depth)
+    .value("heif_channel_disparity", heif_channel_disparity);
+
     emscripten::enum_<heif_filetype_result>("heif_filetype_result")
     .value("heif_filetype_no", heif_filetype_no)
     .value("heif_filetype_yes_supported", heif_filetype_yes_supported)

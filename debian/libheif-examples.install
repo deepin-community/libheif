@@ -1,3 +1,4 @@
+usr/bin/heif-convert
 usr/bin/heif-dec
 usr/bin/heif-enc
 usr/bin/heif-info

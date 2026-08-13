@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -e
+
+DECODE=/usr/bin/heif-dec
+if [ ! -f /usr/bin/heif-dec ]; then
+    # Running from "override_dh_auto_test" in debian/rules during package build.
+    DEB_HOST_GNU_TYPE=$(dpkg-architecture -qDEB_HOST_GNU_TYPE)
+    DECODE=./obj-$DEB_HOST_GNU_TYPE/examples/heif-dec
+fi
+
+if [ ! -f "$DECODE" ]; then
+    echo Decode utility not found
+    exit 1
+fi
+
+output=$(mktemp)
+tmpdir=$(mktemp -d)
+
+decode_file() {
+    local filename="$1"
+    local destination="$2"
+    set +e
+    "$DECODE" "$filename" "$destination" > "$output" 2>&1
+    status=$?
+    set -e
+    if [ $status -ne 0 ]; then
+        echo "Decoding failed, exit code $status"
+        cat "$output"
+        ls -la "$tmpdir"
+        return 255
+    fi
+}
+
+check_file() {
+    local filename="$1"
+    if [ ! -f "$filename" ]; then
+        echo "Decoding failed, file $filename not found"
+        cat "$output"
+        ls -la "$tmpdir"
+        return 255
+    fi
+}
+
+decode_file "./examples/example.heic" "$tmpdir/example-heic.png"
+check_file "$tmpdir/example-heic-1.png"
+check_file "$tmpdir/example-heic-2.png"
+
+decode_file "./examples/example.avif" "$tmpdir/example-avif.jpg"
+check_file "$tmpdir/example-avif.jpg"

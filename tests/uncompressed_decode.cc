@@ -23,7 +23,7 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 */
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 #include "libheif/heif.h"
 #include "libheif/api_structs.h"
 #include <cstdint>
@@ -82,8 +82,7 @@ TEST_CASE("check image handle alpha channel") {
   auto file = GENERATE(FILES, MONO_FILES, ALL_YUV_FILES);
   auto context = get_context_for_test_file(file);
   INFO("file name: " << file);
-  // int expect_alpha = (strchr(file, 'A') == NULL) ? 0 : 1;
-  int expect_alpha = 0; // TODO: fix this
+  int expect_alpha = (strchr(file, 'A') == NULL) ? 0 : 1;
   heif_image_handle *handle = get_primary_image_handle(context);
   int has_alpha = heif_image_handle_has_alpha_channel(handle);
   REQUIRE(has_alpha == expect_alpha);
@@ -164,6 +163,7 @@ TEST_CASE("check image handle no metadata blocks") {
   heif_context_free(context);
 }
 
-
-
+TEST_CASE("check uncompressed is advertised") {
+  REQUIRE(heif_have_decoder_for_format(heif_compression_uncompressed));
+}
 

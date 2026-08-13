@@ -22,7 +22,7 @@ License: LGPL-3+ and BSD-2-clause
 
 Files: debian/*
 Copyright:
-  2018 Joachim Bauch <bauch@struktur.de>
+  2018 Joachim Bauch <fancycode@debian.org>
 License: GPL-3+
 
 Files: examples/*
@@ -79,10 +79,8 @@ License: Expat
 Comment: Please note that only the tests are MIT/Expat licensed while the decoding
  library itself is licensed as LGPL-3+.
 
-Files: tests/catch.hpp
+Files: tests/catch_amalgamated.*
 Copyright:
-  Copyright (c) 2022 Two Blue Cubes Ltd. All rights reserved.
-  Copyright 2017 Two Blue Cubes Ltd. All rights reserved.
   Copyright Catch2 Authors
 License: BSL-1.0
 

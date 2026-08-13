@@ -1,0 +1,52 @@
+Description: GHSA-73p7-m7gg-w2jv: bounds-check unci tile-range extraction before memcpy
+ The final "cut out the range that we actually need" memcpy() calls in the
+ generic-compression / uncompressed decode path used attacker-controlled
+ range_start_offset/range_size with no bounds validation at all, allowing a
+ read past the end of the decompressed data buffer. Add a subtraction-form
+ bounds check (avoiding a uint64_t addition overflow) before each memcpy.
+Origin: upstream, https://github.com/strukturag/libheif/commit/089a809bf6bed1abae102d5e97b6bb8c4f53b515
+Bug: https://github.com/strukturag/libheif/security/advisories/GHSA-73p7-m7gg-w2jv
+Last-Update: 2026-08-06
+Comment: No Bug-Debian field: no CVE has been assigned to this advisory and
+ it therefore has no entry in the Debian security tracker yet.
+ .
+ Upstream's fix is against libheif/codecs/uncompressed/unc_decoder.cc
+ (function unc_decoder::get_compressed_image_data_uncompressed), which does
+ not exist at 1.19.8 (created later by the >=1.20 uncompressed codec
+ reorganization). v1.19.8's equivalent code,
+ AbstractDecoder::get_compressed_image_data_uncompressed() in
+ libheif/codecs/uncompressed/decoder_abstract.cc, has no range check at all
+ before either of its two memcpy() call sites (it predates even the
+ overflow-prone addition-form check that upstream commit d7a43f98 first
+ introduced in September 2025, which itself post-dates v1.19.8). This patch
+ hand-adds the non-overflowing subtraction-form check
+ (range_start_offset > size || range_size > size - range_start_offset)
+ immediately before each of the two memcpy() calls, using the same error
+ code/suberror/message as upstream's fix.
+
+--- a/libheif/codecs/uncompressed/decoder_abstract.cc
++++ b/libheif/codecs/uncompressed/decoder_abstract.cc
+@@ -238,6 +238,11 @@ const Error AbstractDecoder::get_compressed_image_data_uncompressed(const HeifCo
+     }
+
+     // cut out the range that we actually need
++    if (range_start_offset > data->size() || range_size > data->size() - range_start_offset) {
++      return {heif_error_Invalid_input,
++              heif_suberror_Unspecified,
++              "Data range out of existing range"};
++    }
+     memcpy(data->data(), data->data() + range_start_offset, range_size);
+     data->resize(range_size);
+   }
+@@ -256,6 +261,11 @@ const Error AbstractDecoder::get_compressed_image_data_uncompressed(const HeifCo
+     }
+
+     // cut out the range that we actually need
++    if (range_start_offset > data->size() || range_size > data->size() - range_start_offset) {
++      return {heif_error_Invalid_input,
++              heif_suberror_Unspecified,
++              "Data range out of existing range"};
++    }
+     memcpy(data->data(), data->data() + range_start_offset, range_size);
+     data->resize(range_size);
+   }
