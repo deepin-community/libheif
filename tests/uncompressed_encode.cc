@@ -24,7 +24,7 @@
   SOFTWARE.
 */
 
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 #include "libheif/api_structs.h"
 #include "libheif/heif.h"
 #include <cstdint>
@@ -41,7 +41,7 @@ TEST_CASE("check have uncompressed")
   REQUIRE(err.code == heif_error_Ok);
 
   const char *name = heif_encoder_get_name(enc);
-  REQUIRE(strcmp(name, "uncompressed") == 0);
+  REQUIRE(strcmp(name, "builtin") == 0);
 
   heif_encoder_release(enc);
 
@@ -631,6 +631,7 @@ static void do_encode(heif_image* input_image, const char* filename, bool check_
 
   heif_context_free(ctx);
 }
+
 
 TEST_CASE("Encode RGB")
 {

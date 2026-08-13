@@ -52,7 +52,7 @@ struct heif_error heif_item_get_property_camera_intrinsic_matrix(const struct he
     return err.error_struct(context->context.get());
   }
 
-  if (propertyId - 1 < 0 || propertyId - 1 >= properties.size()) {
+  if (propertyId < 1 || propertyId - 1 >= properties.size()) {
     return {heif_error_Usage_error, heif_suberror_Invalid_property, "property index out of range"};
   }
 
@@ -213,7 +213,7 @@ struct heif_error heif_item_get_property_camera_extrinsic_matrix(const struct he
     return err.error_struct(context->context.get());
   }
 
-  if (propertyId - 1 < 0 || propertyId - 1 >= properties.size()) {
+  if (propertyId < 1 || propertyId - 1 >= properties.size()) {
     return {heif_error_Usage_error, heif_suberror_Invalid_property, "property index out of range"};
   }
 
@@ -274,6 +274,25 @@ struct heif_error heif_property_camera_extrinsic_matrix_get_world_coordinate_sys
   }
 
   *out_wcs_id = matrix->matrix.world_coordinate_system_id;
+
+  return heif_error_success;
+}
+
+
+struct heif_error heif_image_extract_area(const heif_image* srcimg,
+                                          uint32_t x0, uint32_t y0, uint32_t w, uint32_t h,
+                                          const heif_security_limits* limits,
+                                          struct heif_image** out_image)
+{
+  auto extractResult = srcimg->image->extract_image_area(x0,y0,w,h, limits);
+  if (extractResult.error) {
+    return extractResult.error.error_struct(srcimg->image.get());
+  }
+
+  heif_image* area = new heif_image;
+  area->image = extractResult.value;
+
+  *out_image = area;
 
   return heif_error_success;
 }
